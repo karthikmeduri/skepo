@@ -8,6 +8,7 @@ import type { AppState, Bot, ChatRequest, ConsultationRequest, LedgerNote, PullP
 import { approveWorkflow, listWorkflows, retryWorkflowTask, setManifestCancelled, setManifestPaused, startWorkflow } from './orchestrator.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+if (process.env.SKEPO_CAPTURE_PATH) app.disableHardwareAcceleration()
 const activeRequests = new Map<string, AbortController>()
 const workspaceWatchers = new Map<string, FSWatcher>()
 
@@ -437,6 +438,7 @@ function registerIpc() {
 }
 
 function createWindow() {
+  const capturePath = process.env.SKEPO_CAPTURE_PATH
   const win = new BrowserWindow({
     width: 1440,
     height: 920,
@@ -452,7 +454,17 @@ function createWindow() {
       sandbox: true,
     },
   })
-  win.once('ready-to-show', () => win.show())
+  if (capturePath) {
+    win.webContents.once('did-finish-load', () => {
+      win.showInactive()
+      setTimeout(async () => {
+        const image = await win.webContents.capturePage()
+        await fs.mkdir(path.dirname(capturePath), { recursive: true })
+        await fs.writeFile(capturePath, image.toPNG())
+        app.quit()
+      }, 3000)
+    })
+  } else win.once('ready-to-show', () => win.show())
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//.test(url)) void shell.openExternal(url)
     return { action: 'deny' }

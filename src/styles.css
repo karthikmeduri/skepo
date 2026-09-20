@@ -41,8 +41,9 @@ h1,h2,h3 { font-family: 'Segoe UI Variable Display', 'Segoe UI', sans-serif; }
 .app-shell { width: 100%; height: 100%; display: grid; grid-template-rows: 42px 1fr; background: var(--bg); }
 .titlebar { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); background: var(--panel); user-select: none; }
 .titlebar-drag { -webkit-app-region: drag; height: 100%; flex: 1; display: flex; align-items: center; gap: 9px; padding-left: 14px; font-weight: 650; }
-.app-mark { width: 23px; height: 23px; display: grid; place-items: center; border-radius: 7px; color: white; font-family: 'Segoe UI Variable Display','Segoe UI',sans-serif; font-weight: 800; font-size: 12px; background: linear-gradient(145deg,#a78bfa,#6d28d9); box-shadow: 0 0 24px rgba(139,92,246,.28); }
-.app-mark.large { width: 46px; height: 46px; border-radius: 13px; font-size: 22px; }
+.app-mark { width: 25px; height: 25px; display: grid; place-items: center; overflow: hidden; border-radius: 7px; background: #111116; box-shadow: 0 0 24px rgba(139,92,246,.28); }
+.app-mark img { width: 100%; height: 100%; object-fit: contain; }
+.app-mark.large { width: 58px; height: 58px; border-radius: 16px; }
 .private-pill { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: #b7f7cd; padding: 3px 6px; border: 1px solid rgba(34,197,94,.24); border-radius: 4px; background: rgba(34,197,94,.08); }
 .window-actions { display: flex; height: 100%; -webkit-app-region: no-drag; }
 .window-actions button { width: 46px; height: 100%; border: 0; color: var(--muted); background: transparent; display: grid; place-items: center; }

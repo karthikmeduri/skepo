@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="240" viewBox="0 0 920 240" role="img" aria-labelledby="title desc">
+  <title id="title">Skepo logo</title>
+  <desc id="desc">A violet woven hive with three connected mint nodes beside the Skepo wordmark.</desc>
+  <defs><linearGradient id="violet" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#A78BFA"/><stop offset="1" stop-color="#7C3AED"/></linearGradient></defs>
+  <g transform="translate(24 15)">
+    <path fill="url(#violet)" d="M89 4c20 0 37 12 44 30H45C52 16 69 4 89 4Z"/>
+    <path fill="url(#violet)" d="M28 51c10-9 26-12 43-12h46c17 0 33 3 43 12 8 7 12 16 12 27 0 3 0 5-1 8L24 70c1-7 2-13 4-19Z"/>
+    <path fill="url(#violet)" d="M17 78 167 95c12 2 21 13 20 26-1 8-5 15-11 20L15 111C8 102 9 87 17 78Z"/>
+    <path fill="url(#violet)" d="m10 119 164 31c8 2 14 8 16 16 2 10-3 20-12 25H21C8 183 1 169 3 154c1-14 3-25 7-35Z"/>
+    <path fill="url(#violet)" d="M34 199h121c-8 18-31 30-61 30-29 0-52-12-60-30Z"/>
+    <path d="M72 103 113 133 73 164" fill="none" stroke="#251044" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M72 103 113 133 73 164" fill="none" stroke="#8B5CF6" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+    <g fill="#6EE7A0" stroke="#32165B" stroke-width="7"><circle cx="68" cy="100" r="17"/><circle cx="116" cy="133" r="17"/><circle cx="68" cy="167" r="17"/></g>
+  </g>
+  <text x="255" y="158" fill="#F5F3FF" font-family="Segoe UI Variable Display,Segoe UI,Arial,sans-serif" font-size="122" font-weight="800" letter-spacing="7">SKEPO</text>
+</svg>

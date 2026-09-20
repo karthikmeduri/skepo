@@ -39,7 +39,7 @@
     "asar": true,
     "directories": { "output": "release" },
     "files": ["dist/**/*", "dist-electron/**/*", "package.json"],
-    "win": { "target": ["nsis"], "artifactName": "Skepo-Setup-${version}.${ext}", "signAndEditExecutable": false },
+    "win": { "target": ["nsis"], "artifactName": "Skepo-Setup-${version}.${ext}", "icon": "assets/brand/skepo-icon.png", "signAndEditExecutable": false },
     "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true, "createDesktopShortcut": true }
   }
 }

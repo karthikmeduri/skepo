@@ -13,6 +13,8 @@ import { Toasts, type ToastData } from './components/Toast'
 import { createConversation, titleFromMessage, toMarkdown, uid } from './lib'
 import type { AppSettings, AppState, Bot, Conversation, LedgerNote, Message, OllamaModel, PullProgress, StreamEvent, WorkflowEvent, WorkflowManifest, WorkflowStartRequest, WorkspaceStatus } from './types'
 
+const skepoIcon = new URL('../assets/brand/skepo-icon.png', import.meta.url).href
+
 const emptyState: AppState = {
   bots: [], conversations: [],
   settings: { ollamaUrl: 'http://127.0.0.1:11434', theme: 'dark', sendOnEnter: true, compactMode: false, workspacePath: '', sharedMemoryEnabled: true, maxSharedNotes: 4 },
@@ -262,7 +264,7 @@ export default function App() {
     return <ChatView bot={bot} conversation={conversation} bots={state.bots} streaming={!!activeRequest.current} sendOnEnter={state.settings.sendOnEnter} ledgerEnabled={!!state.settings.workspacePath && state.settings.sharedMemoryEnabled} onConsult={() => setConsultOpen(true)} onSelectBot={selectBot} onSend={content => void sendMessage(content)} onStop={() => void stopGeneration()} onRegenerate={regenerate} onDelete={() => { if (conversation && confirm('Delete this conversation?')) { setState(current => ({ ...current, conversations: current.conversations.filter(item => item.id !== conversation.id) })); setActiveConversationId(undefined) } }} onExport={() => { if (conversation) void window.localbot.exportConversation(toMarkdown(conversation, bot), conversation.title) }} onOpenBots={() => setView('bots')} />
   }, [view, state, models, connection, modelsLoading, pullProgress, activeConversationId, preferredBotId, ledgerStatus, ledgerLoading, workflows, workflowBusy])
 
-  if (!loaded) return <div className="app-loading"><span className="app-mark large">L</span><p>Opening your workspace…</p></div>
+  if (!loaded) return <div className="app-loading"><span className="app-mark large"><img src={skepoIcon} alt="" /></span><p>Opening your workspace…</p></div>
   return <div className="app-shell">
     <Titlebar />
     <div className="app-body">

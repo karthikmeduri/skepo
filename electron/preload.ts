@@ -1,5 +1,15 @@
-import { contextBridge, ipcRenderer } from 'electron'
-import type { AppState, Bot, ChatRequest, ConsultationRequest, PullProgress, StreamEvent, WorkflowEvent, WorkflowStartRequest } from '../src/types'
+type AppState = import('../src/types').AppState
+type Bot = import('../src/types').Bot
+type ChatRequest = import('../src/types').ChatRequest
+type ConsultationRequest = import('../src/types').ConsultationRequest
+type PullProgress = import('../src/types').PullProgress
+type StreamEvent = import('../src/types').StreamEvent
+type WorkflowEvent = import('../src/types').WorkflowEvent
+type WorkflowStartRequest = import('../src/types').WorkflowStartRequest
+
+// Sandboxed Electron preload scripts execute in a CommonJS-like environment.
+// Keep the runtime import as require() even though the application package is ESM.
+const { contextBridge, ipcRenderer } = require('electron') as typeof import('electron')
 
 contextBridge.exposeInMainWorld('localbot', {
   loadState: () => ipcRenderer.invoke('state:load'),
