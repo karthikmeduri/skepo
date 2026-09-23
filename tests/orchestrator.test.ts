@@ -17,7 +17,7 @@ describe('workflow orchestrator', () => {
     const bots = [makeBot('broker', 'Broker'), makeBot('worker-a', 'Researcher'), makeBot('worker-b', 'Builder')]
     const request: WorkflowStartRequest = {
       workspacePath: workspace, ollamaUrl: 'http://test', goal: 'Produce a tested design', orchestratorBotId: 'broker', reviewerBotId: 'broker', workerBotIds: ['worker-a','worker-b'], bots,
-      budget: { maxTasks: 2, maxParallel: 2, maxRetries: 1, maxTotalTokens: 5000, timeoutMinutes: 10, approvePlan: true },
+      budget: { maxTasks: 2, maxParallel: 2, maxRetries: 1, maxTotalTokens: 5000, timeoutMinutes: 10, approvePlan: true, decisionMode: 'local' },
     }
     const updates: WorkflowManifest[] = []
     const manifest = await startWorkflow(request, async () => ({ content: JSON.stringify({ tasks: [
@@ -45,7 +45,7 @@ describe('workflow orchestrator', () => {
     const bots = [makeBot('broker', 'Broker'), makeBot('worker', 'Worker'), makeBot('reviewer', 'Reviewer')]
     const request: WorkflowStartRequest = {
       workspacePath: workspace, ollamaUrl: 'http://test', goal: 'Research then synthesize', orchestratorBotId: 'broker', reviewerBotId: 'reviewer', workerBotIds: ['worker'], bots,
-      budget: { maxTasks: 4, maxParallel: 2, maxRetries: 0, maxTotalTokens: 5000, timeoutMinutes: 10, approvePlan: false },
+      budget: { maxTasks: 4, maxParallel: 2, maxRetries: 0, maxTotalTokens: 5000, timeoutMinutes: 10, approvePlan: false, decisionMode: 'local' },
     }
     let calls = 0
     let finish!: (manifest: WorkflowManifest) => void
@@ -58,10 +58,12 @@ describe('workflow orchestrator', () => {
       ] }), tokens: 10 }
       if (bot.id === 'reviewer') return { content: 'Final reviewed answer', tokens: 7 }
       return { content: `Worker result ${calls}`, tokens: 5 }
-    }, async () => [], manifest => { if (manifest.status === 'completed') finish(manifest) })
+    }, async () => [], manifest => { if (manifest.status === 'completed') finish(manifest) }, async decision => ({ id: `${decision.kind}-${decision.taskId ?? 'plan'}`, kind: decision.kind, provider: 'local', choice: decision.kind === 'plan-gate' ? 'proceed' : 'accept', confidence: 0.9, taskId: decision.taskId, createdAt: Date.now() }))
     const result = await Promise.race([completed, new Promise<never>((_, reject) => setTimeout(() => reject(new Error('workflow timeout')), 3000))])
     expect(result.tasks.every(task => task.status === 'completed')).toBe(true)
     expect(result.finalOutput).toBe('Final reviewed answer')
     expect(result.tokensUsed).toBe(27)
+    expect(result.decisions).toHaveLength(3)
+    await expect(fs.readFile(path.join(workspace, '.skepo-ledger', 'sessions', result.sessionId, 'decisions.md'), 'utf8')).resolves.toContain('result-check')
   })
 })

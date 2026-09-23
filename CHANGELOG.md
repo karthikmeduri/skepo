@@ -1,9 +1,18 @@
 # Changelog
 
+## 0.5.0 — Harness and decision layer
+
+- Added an automatic four-role starter team using the first installed Ollama model
+- Added typed plan and result gates with Auto, Local, and Jev modes
+- Added optional Jev integration with Windows-encrypted API key storage
+- Added a zero-token deterministic fallback when Jev is not configured or unavailable
+- Added a live decision trail and durable decision records for every workflow
+- Made decision logs atomic under parallel worker completion
+
 ## 0.4.0 — Skepo
 
 - Renamed LocalBot to Skepo
-- Added the Skepo identity: skep for the shared hive, O for organization and orchestration
+- Added the Skepo visual identity and Windows application branding
 - New workspaces now use `.skepo-ledger`
 - Preserved compatibility with existing `.localbot-ledger` workspaces
 - Added automatic import of previous LocalBot application state

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createBot, createConversation, formatBytes, titleFromMessage, toMarkdown } from './lib'
+import { createBot, createConversation, createStarterTeam, formatBytes, titleFromMessage, toMarkdown } from './lib'
 
 describe('local data helpers', () => {
   it('creates a bot with safe generation defaults', () => {
@@ -12,6 +12,12 @@ describe('local data helpers', () => {
   it('creates and truncates a conversation title', () => {
     expect(titleFromMessage('  Hello   local world  ')).toBe('Hello local world')
     expect(titleFromMessage('a'.repeat(60))).toBe(`${'a'.repeat(48)}…`)
+  })
+
+  it('creates a ready-to-run specialist team', () => {
+    const team = createStarterTeam('qwen2.5-coder:7b')
+    expect(team.map(bot => bot.name)).toEqual(['Broker', 'Researcher', 'Builder', 'Reviewer'])
+    expect(team.every(bot => bot.model === 'qwen2.5-coder:7b')).toBe(true)
   })
 
   it('exports a readable markdown transcript', () => {

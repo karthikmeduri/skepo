@@ -2,12 +2,14 @@ import fs from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
-import type { Bot, LedgerNote, WorkflowManifest, WorkflowStartRequest, WorkflowTask } from '../src/types'
+import type { Bot, DecisionRecord, LedgerNote, WorkflowManifest, WorkflowStartRequest, WorkflowTask } from '../src/types'
+import type { DecisionRequest } from './decision-engine'
 
 export type ModelResult = { content: string; tokens: number }
 export type ModelRunner = (bot: Bot, messages: { role: string; content: string }[], ollamaUrl: string, timeoutMs?: number) => Promise<ModelResult>
 export type WorkflowEmitter = (manifest: WorkflowManifest) => void
 export type NoteFinder = (workspace: string, query: string, botId: string, limit: number) => Promise<LedgerNote[]>
+export type DecisionRunner = (request: DecisionRequest) => Promise<DecisionRecord>
 
 const active = new Map<string, { cancelled: boolean; paused: boolean; wake?: () => void }>()
 const writeQueues = new Map<string, Promise<void>>()
@@ -34,12 +36,33 @@ async function atomicWrite(file: string, content: string) {
   try { await operation } finally { if (writeQueues.get(file) === operation) writeQueues.delete(file) }
 }
 
+async function atomicAppend(file: string, content: string) {
+  const previous = writeQueues.get(file) ?? Promise.resolve()
+  const operation = previous.catch(() => undefined).then(async () => {
+    await fs.mkdir(path.dirname(file), { recursive: true })
+    let existing = ''
+    try { existing = await fs.readFile(file, 'utf8') } catch { /* The file will be created atomically. */ }
+    const temp = `${file}.${randomUUID()}.tmp`
+    await fs.writeFile(temp, `${existing}${content}`, 'utf8')
+    await fs.rename(temp, file)
+  })
+  writeQueues.set(file, operation)
+  try { await operation } finally { if (writeQueues.get(file) === operation) writeQueues.delete(file) }
+}
+
 async function saveManifest(workspace: string, manifest: WorkflowManifest, emit: WorkflowEmitter) {
   manifest.revision += 1
   manifest.updatedAt = Date.now()
   await atomicWrite(manifestPath(workspace, manifest.sessionId), JSON.stringify(manifest, null, 2))
   await atomicWrite(path.join(sessionFolder(workspace, manifest.sessionId), 'STATE.md'), stateMarkdown(manifest))
   emit(structuredClone(manifest))
+}
+
+async function recordDecision(workspace: string, manifest: WorkflowManifest, decision: DecisionRecord) {
+  manifest.decisions.push(decision)
+  const file = path.join(sessionFolder(workspace, manifest.sessionId), 'decisions.md')
+  const line = `- ${new Date(decision.createdAt).toISOString()} · **${decision.kind}**${decision.taskId ? ` · \`${decision.taskId}\`` : ''} · ${decision.provider} → **${decision.choice}** (${Math.round(decision.confidence * 100)}%)${decision.note ? ` — ${decision.note}` : ''}\n`
+  await atomicAppend(file, line)
 }
 
 function stateMarkdown(manifest: WorkflowManifest) {
@@ -102,13 +125,13 @@ function enforceLimits(manifest: WorkflowManifest) {
   if (active.get(manifest.sessionId)?.cancelled) throw new Error('Workflow cancelled.')
 }
 
-export async function startWorkflow(request: WorkflowStartRequest, runModel: ModelRunner, findNotes: NoteFinder, emit: WorkflowEmitter) {
+export async function startWorkflow(request: WorkflowStartRequest, runModel: ModelRunner, findNotes: NoteFinder, emit: WorkflowEmitter, decide?: DecisionRunner) {
   if (!request.workspacePath) throw new Error('Choose a Shared Ledger workspace first.')
   if (!request.goal.trim()) throw new Error('Enter a workflow goal.')
   if (!request.workerBotIds.length) throw new Error('Select at least one worker bot.')
   const sessionId = `${new Date().toISOString().replace(/[:.]/g, '-')}-${randomUUID().slice(0, 6)}`
   const now = Date.now()
-  const manifest: WorkflowManifest = { version: 1, revision: 0, sessionId, goal: request.goal.trim(), status: 'planning', orchestratorBotId: request.orchestratorBotId, reviewerBotId: request.reviewerBotId, workerBotIds: request.workerBotIds, tasks: [], budget: request.budget, tokensUsed: 0, startedAt: now, updatedAt: now }
+  const manifest: WorkflowManifest = { version: 1, revision: 0, sessionId, goal: request.goal.trim(), status: 'planning', orchestratorBotId: request.orchestratorBotId, reviewerBotId: request.reviewerBotId, workerBotIds: request.workerBotIds, tasks: [], budget: request.budget, tokensUsed: 0, decisions: [], startedAt: now, updatedAt: now }
   active.set(sessionId, { cancelled: false, paused: false })
   await fs.mkdir(path.join(sessionFolder(request.workspacePath, sessionId), 'tasks'), { recursive: true })
   await atomicWrite(path.join(sessionFolder(request.workspacePath, sessionId), 'decisions.md'), `# Decisions — ${request.goal}\n\n`)
@@ -122,10 +145,21 @@ export async function startWorkflow(request: WorkflowStartRequest, runModel: Mod
     ], request.ollamaUrl, 180_000)
     manifest.tokensUsed += planning.tokens
     manifest.tasks = normalizePlan(extractObject(planning.content), request)
+    if (decide) {
+      const decision = await decide({
+        kind: 'plan-gate', mode: request.budget.decisionMode ?? 'auto',
+        state: { goal: manifest.goal, tasks: manifest.tasks.map(({ id, title, description, dependencies, risk }) => ({ id, title, description, dependencies, risk })) },
+        instructions: 'Should this bounded execution plan proceed automatically, require human review, or be blocked as unsafe or incoherent?',
+        options: { proceed: 'The plan is coherent and safe to execute.', review: 'The plan needs human review before execution.', block: 'The plan is unsafe or not executable.' },
+      })
+      await recordDecision(request.workspacePath, manifest, decision)
+      if (decision.choice === 'block') throw new Error('The decision gate blocked this plan. Review the decision log and create a safer goal.')
+    }
     for (const task of manifest.tasks) await saveTask(request.workspacePath, sessionId, task)
-    manifest.status = request.budget.approvePlan || manifest.tasks.some(task => task.requiresApproval) ? 'awaiting_approval' : 'running'
+    const planNeedsReview = manifest.decisions.at(-1)?.choice === 'review'
+    manifest.status = request.budget.approvePlan || planNeedsReview || manifest.tasks.some(task => task.requiresApproval) ? 'awaiting_approval' : 'running'
     await saveManifest(request.workspacePath, manifest, emit)
-    if (manifest.status === 'running') void runWorkflow(request, manifest, runModel, findNotes, emit)
+    if (manifest.status === 'running') void runWorkflow(request, manifest, runModel, findNotes, emit, decide)
     else active.delete(sessionId)
     return manifest
   } catch (error) {
@@ -134,7 +168,7 @@ export async function startWorkflow(request: WorkflowStartRequest, runModel: Mod
   }
 }
 
-async function executeTask(request: WorkflowStartRequest, manifest: WorkflowManifest, task: WorkflowTask, runModel: ModelRunner, findNotes: NoteFinder, emit: WorkflowEmitter) {
+async function executeTask(request: WorkflowStartRequest, manifest: WorkflowManifest, task: WorkflowTask, runModel: ModelRunner, findNotes: NoteFinder, emit: WorkflowEmitter, decide?: DecisionRunner) {
   const control = active.get(manifest.sessionId)
   if (!control || control.cancelled) return
   const worker = botById(request, task.assignedBotId)
@@ -148,7 +182,19 @@ async function executeTask(request: WorkflowStartRequest, manifest: WorkflowMani
       { role: 'system', content: `${worker.systemPrompt}\n\nYou are a worker in a bounded local workflow. Complete only your assigned task. Return a concise deliverable with assumptions, evidence, decisions, and next-step information. Do not claim to modify files or external systems.` },
       { role: 'user', content: `Global goal: ${manifest.goal}\n\nAssigned task: ${task.title}\n${task.description}${dependencyResults ? `\n\nCompleted dependencies:\n${dependencyResults}` : ''}${contextFrom(notes)}` },
     ], request.ollamaUrl, Math.max(60_000, request.budget.timeoutMinutes * 60_000))
-    task.result = result.content; task.tokenCount += result.tokens; manifest.tokensUsed += result.tokens; task.status = 'completed'; task.completedAt = Date.now(); task.lease = undefined
+    task.result = result.content; task.tokenCount += result.tokens; manifest.tokensUsed += result.tokens; task.lease = undefined
+    if (decide) {
+      const decision = await decide({
+        kind: 'result-check', mode: request.budget.decisionMode ?? 'auto', taskId: task.id,
+        state: { goal: manifest.goal, task: { title: task.title, description: task.description }, result: result.content },
+        instructions: 'Does this worker result satisfy its assigned task well enough to accept, should it retry, or does it need human review?',
+        options: { accept: 'The result substantially satisfies the assignment.', retry: 'The result is incomplete or failed and should be retried.', review: 'A human should inspect this uncertain or risky result.' },
+      })
+      await recordDecision(request.workspacePath, manifest, decision)
+      if (decision.choice === 'retry') { task.error = 'Decision gate requested a stronger result.'; task.status = task.attempts <= manifest.budget.maxRetries ? 'pending' : 'failed' }
+      else if (decision.choice === 'review') { task.status = 'awaiting_approval'; task.requiresApproval = true; task.risk = 'review' }
+      else { task.status = 'completed'; task.completedAt = Date.now() }
+    } else { task.status = 'completed'; task.completedAt = Date.now() }
   } catch (error) {
     task.error = error instanceof Error ? error.message : String(error); task.lease = undefined
     task.status = task.attempts <= manifest.budget.maxRetries ? 'pending' : 'failed'
@@ -158,7 +204,7 @@ async function executeTask(request: WorkflowStartRequest, manifest: WorkflowMani
   await saveTask(request.workspacePath, manifest.sessionId, task); await saveManifest(request.workspacePath, manifest, emit)
 }
 
-export async function runWorkflow(request: WorkflowStartRequest, manifest: WorkflowManifest, runModel: ModelRunner, findNotes: NoteFinder, emit: WorkflowEmitter) {
+export async function runWorkflow(request: WorkflowStartRequest, manifest: WorkflowManifest, runModel: ModelRunner, findNotes: NoteFinder, emit: WorkflowEmitter, decide?: DecisionRunner) {
   const control = active.get(manifest.sessionId) ?? { cancelled: false, paused: false }
   active.set(manifest.sessionId, control)
   manifest.status = 'running'; await saveManifest(request.workspacePath, manifest, emit)
@@ -177,7 +223,7 @@ export async function runWorkflow(request: WorkflowStartRequest, manifest: Workf
         if (manifest.tasks.some(task => task.status === 'failed' || task.status === 'blocked')) throw new Error('Workflow stopped because one or more tasks failed or became blocked.')
         throw new Error('Workflow has no executable tasks. Check its dependency graph.')
       }
-      await Promise.all(ready.slice(0, manifest.budget.maxParallel).map(task => executeTask(request, manifest, task, runModel, findNotes, emit)))
+      await Promise.all(ready.slice(0, manifest.budget.maxParallel).map(task => executeTask(request, manifest, task, runModel, findNotes, emit, decide)))
     }
     enforceLimits(manifest); manifest.status = 'reviewing'; await saveManifest(request.workspacePath, manifest, emit)
     const reviewer = botById(request, request.reviewerBotId)
@@ -187,7 +233,8 @@ export async function runWorkflow(request: WorkflowStartRequest, manifest: Workf
       { role: 'user', content: `Goal: ${manifest.goal}\n\nWorker outputs:\n${outputs}` },
     ], request.ollamaUrl, 180_000)
     manifest.tokensUsed += review.tokens; manifest.finalOutput = review.content; manifest.status = 'completed'; manifest.completedAt = Date.now()
-    await fs.appendFile(path.join(sessionFolder(request.workspacePath, manifest.sessionId), 'decisions.md'), `## Final review — ${new Date().toISOString()}\n\n${review.content}\n\n`, 'utf8')
+    const decisionsFile = path.join(sessionFolder(request.workspacePath, manifest.sessionId), 'decisions.md')
+    await atomicAppend(decisionsFile, `\n## Final review — ${new Date().toISOString()}\n\n${review.content}\n`)
     await saveManifest(request.workspacePath, manifest, emit)
   } catch (error) {
     const cancelled = active.get(manifest.sessionId)?.cancelled
@@ -201,7 +248,7 @@ export async function listWorkflows(workspace: string) {
   try {
     const entries = await fs.readdir(path.join(root(workspace), 'sessions'), { withFileTypes: true })
     const manifests = await Promise.all(entries.filter(e => e.isDirectory()).map(async e => {
-      try { return JSON.parse(await fs.readFile(manifestPath(workspace, e.name), 'utf8')) as WorkflowManifest } catch { return undefined }
+      try { const value = JSON.parse(await fs.readFile(manifestPath(workspace, e.name), 'utf8')) as WorkflowManifest; return { ...value, decisions: value.decisions ?? [], budget: { ...value.budget, decisionMode: value.budget.decisionMode ?? 'auto' } } } catch { return undefined }
     }))
     return manifests.filter((item): item is WorkflowManifest => !!item).map(item => {
       if (['planning','running','reviewing'].includes(item.status) && !active.has(item.sessionId)) return { ...item, status: 'paused' as const, error: 'Run was interrupted. Resume to reclaim expired task leases.' }
@@ -211,22 +258,23 @@ export async function listWorkflows(workspace: string) {
 }
 
 export async function loadWorkflow(workspace: string, sessionId: string) {
-  return JSON.parse(await fs.readFile(manifestPath(workspace, sessionId), 'utf8')) as WorkflowManifest
+  const value = JSON.parse(await fs.readFile(manifestPath(workspace, sessionId), 'utf8')) as WorkflowManifest
+  return { ...value, decisions: value.decisions ?? [], budget: { ...value.budget, decisionMode: value.budget.decisionMode ?? 'auto' } }
 }
 
 export function pauseWorkflow(sessionId: string) { const control = active.get(sessionId); if (control) control.paused = true }
 export function resumeWorkflow(sessionId: string) { const control = active.get(sessionId); if (control) { control.paused = false; control.wake?.(); control.wake = undefined } }
 export function cancelWorkflow(sessionId: string) { const control = active.get(sessionId); if (control) { control.cancelled = true; control.paused = false; control.wake?.() } }
 
-export async function approveWorkflow(request: WorkflowStartRequest, sessionId: string, runModel: ModelRunner, findNotes: NoteFinder, emit: WorkflowEmitter) {
+export async function approveWorkflow(request: WorkflowStartRequest, sessionId: string, runModel: ModelRunner, findNotes: NoteFinder, emit: WorkflowEmitter, decide?: DecisionRunner) {
   const manifest = await loadWorkflow(request.workspacePath, sessionId)
   const wasActive = active.has(sessionId)
-  for (const task of manifest.tasks) if (task.status === 'awaiting_approval') { task.status = 'pending'; await saveTask(request.workspacePath, sessionId, task) }
+  for (const task of manifest.tasks) if (task.status === 'awaiting_approval') { task.status = task.result ? 'completed' : 'pending'; if (task.result) task.completedAt = Date.now(); await saveTask(request.workspacePath, sessionId, task) }
   if (!wasActive) for (const task of manifest.tasks) if (task.status === 'running') { task.status = 'pending'; task.lease = undefined; task.error = 'Recovered after an interrupted run.'; await saveTask(request.workspacePath, sessionId, task) }
   manifest.status = 'running'
   if (wasActive) resumeWorkflow(sessionId); else active.set(sessionId, { cancelled: false, paused: false })
   await saveManifest(request.workspacePath, manifest, emit)
-  if (!wasActive) void runWorkflow(request, manifest, runModel, findNotes, emit)
+  if (!wasActive) void runWorkflow(request, manifest, runModel, findNotes, emit, decide)
   return manifest
 }
 
@@ -244,11 +292,11 @@ export async function setManifestCancelled(workspace: string, sessionId: string,
   await saveManifest(workspace, manifest, emit); return manifest
 }
 
-export async function retryWorkflowTask(request: WorkflowStartRequest, sessionId: string, taskId: string, runModel: ModelRunner, findNotes: NoteFinder, emit: WorkflowEmitter) {
+export async function retryWorkflowTask(request: WorkflowStartRequest, sessionId: string, taskId: string, runModel: ModelRunner, findNotes: NoteFinder, emit: WorkflowEmitter, decide?: DecisionRunner) {
   const manifest = await loadWorkflow(request.workspacePath, sessionId)
   const task = manifest.tasks.find(item => item.id === taskId)
   if (!task) throw new Error('Task not found.')
   task.status = 'pending'; task.error = undefined; task.attempts = 0
   for (const dependent of manifest.tasks) if (dependent.status === 'blocked' && dependent.dependencies.includes(taskId)) { dependent.status = 'pending'; dependent.error = undefined }
-  active.set(sessionId, { cancelled: false, paused: false }); await saveTask(request.workspacePath, sessionId, task); void runWorkflow(request, manifest, runModel, findNotes, emit); return manifest
+  active.set(sessionId, { cancelled: false, paused: false }); await saveTask(request.workspacePath, sessionId, task); void runWorkflow(request, manifest, runModel, findNotes, emit, decide); return manifest
 }

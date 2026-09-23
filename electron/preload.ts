@@ -6,6 +6,7 @@ type PullProgress = import('../src/types').PullProgress
 type StreamEvent = import('../src/types').StreamEvent
 type WorkflowEvent = import('../src/types').WorkflowEvent
 type WorkflowStartRequest = import('../src/types').WorkflowStartRequest
+type DecisionEngineStatus = import('../src/types').DecisionEngineStatus
 
 // Sandboxed Electron preload scripts execute in a CommonJS-like environment.
 // Keep the runtime import as require() even though the application package is ESM.
@@ -14,6 +15,9 @@ const { contextBridge, ipcRenderer } = require('electron') as typeof import('ele
 contextBridge.exposeInMainWorld('localbot', {
   loadState: () => ipcRenderer.invoke('state:load'),
   saveState: (state: AppState) => ipcRenderer.invoke('state:save', state),
+  decisionStatus: (): Promise<DecisionEngineStatus> => ipcRenderer.invoke('decision:status'),
+  setJevApiKey: (apiKey: string): Promise<DecisionEngineStatus> => ipcRenderer.invoke('decision:set-key', apiKey),
+  clearJevApiKey: (): Promise<DecisionEngineStatus> => ipcRenderer.invoke('decision:clear-key'),
   listModels: (url: string) => ipcRenderer.invoke('ollama:models', url),
   checkOllama: (url: string) => ipcRenderer.invoke('ollama:check', url),
   startChat: (request: ChatRequest, url: string) => ipcRenderer.invoke('ollama:chat', request, url),

@@ -6,6 +6,7 @@ import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import type { AppState, Bot, ChatRequest, ConsultationRequest, LedgerNote, PullProgress, WorkflowManifest, WorkflowStartRequest, WorkspaceStatus } from '../src/types'
 import { approveWorkflow, listWorkflows, retryWorkflowTask, setManifestCancelled, setManifestPaused, startWorkflow } from './orchestrator.js'
+import { clearJevApiKey, decisionEngineStatus, runDecision, setJevApiKey } from './decision-engine.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 if (process.env.SKEPO_CAPTURE_PATH) app.disableHardwareAcceleration()
@@ -23,6 +24,7 @@ const defaultState: AppState = {
     workspacePath: '',
     sharedMemoryEnabled: true,
     maxSharedNotes: 4,
+    decisionMode: 'auto',
   },
 }
 
@@ -238,6 +240,9 @@ async function writeState(state: AppState) {
 function registerIpc() {
   ipcMain.handle('state:load', readState)
   ipcMain.handle('state:save', (_event, state: AppState) => writeState(state))
+  ipcMain.handle('decision:status', () => decisionEngineStatus())
+  ipcMain.handle('decision:set-key', (_event, apiKey: string) => setJevApiKey(apiKey))
+  ipcMain.handle('decision:clear-key', () => clearJevApiKey())
 
   ipcMain.handle('ollama:check', async (_event, rawUrl: string) => {
     try {
@@ -413,10 +418,10 @@ function registerIpc() {
   })
   ipcMain.handle('workflow:list', (_event, workspace: string) => listWorkflows(workspace))
   ipcMain.handle('workflow:start', async (event, request: WorkflowStartRequest) => {
-    return startWorkflow(request, runModel, relevantNotes, createWorkflowEmitter(event.sender, request))
+    return startWorkflow(request, runModel, relevantNotes, createWorkflowEmitter(event.sender, request), runDecision)
   })
   ipcMain.handle('workflow:approve', async (event, request: WorkflowStartRequest, sessionId: string) => {
-    return approveWorkflow(request, sessionId, runModel, relevantNotes, createWorkflowEmitter(event.sender, request))
+    return approveWorkflow(request, sessionId, runModel, relevantNotes, createWorkflowEmitter(event.sender, request), runDecision)
   })
   ipcMain.handle('workflow:pause', async (event, workspace: string, sessionId: string, paused: boolean) => {
     const emit = (manifest: unknown) => { if (!event.sender.isDestroyed()) event.sender.send('workflow:event', { type: 'updated', manifest }) }
@@ -427,7 +432,7 @@ function registerIpc() {
     return setManifestCancelled(workspace, sessionId, emit)
   })
   ipcMain.handle('workflow:retry-task', async (event, request: WorkflowStartRequest, sessionId: string, taskId: string) => {
-    return retryWorkflowTask(request, sessionId, taskId, runModel, relevantNotes, createWorkflowEmitter(event.sender, request))
+    return retryWorkflowTask(request, sessionId, taskId, runModel, relevantNotes, createWorkflowEmitter(event.sender, request), runDecision)
   })
   ipcMain.on('window:minimize', (event) => BrowserWindow.fromWebContents(event.sender)?.minimize())
   ipcMain.on('window:maximize', (event) => {

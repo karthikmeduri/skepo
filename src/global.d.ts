@@ -1,10 +1,13 @@
-import type { AppState, Bot, ChatRequest, ConsultationRequest, LedgerNote, OllamaModel, PullProgress, StreamEvent, WorkflowEvent, WorkflowManifest, WorkflowStartRequest, WorkspaceStatus } from './types'
+import type { AppState, Bot, ChatRequest, ConsultationRequest, DecisionEngineStatus, LedgerNote, OllamaModel, PullProgress, StreamEvent, WorkflowEvent, WorkflowManifest, WorkflowStartRequest, WorkspaceStatus } from './types'
 
 declare global {
   interface Window {
     localbot: {
       loadState(): Promise<AppState>
       saveState(state: AppState): Promise<void>
+      decisionStatus(): Promise<DecisionEngineStatus>
+      setJevApiKey(apiKey: string): Promise<DecisionEngineStatus>
+      clearJevApiKey(): Promise<DecisionEngineStatus>
       listModels(url: string): Promise<OllamaModel[]>
       checkOllama(url: string): Promise<{ ok: boolean; version?: string; error?: string }>
       startChat(request: ChatRequest, url: string): Promise<void>

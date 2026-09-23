@@ -3,6 +3,7 @@ dist/
 dist-electron/
 release/
 .pnpm-store/
+.tmp/
 .codex-remote-attachments/
 .demo-user-data/
 .demo-workspace/

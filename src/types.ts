@@ -41,6 +41,7 @@ export interface AppSettings {
   workspacePath: string
   sharedMemoryEnabled: boolean
   maxSharedNotes: number
+  decisionMode: DecisionMode
 }
 
 export interface OllamaModel {
@@ -119,6 +120,27 @@ export interface WorkflowBudget {
   maxTotalTokens: number
   timeoutMinutes: number
   approvePlan: boolean
+  decisionMode: DecisionMode
+}
+
+export type DecisionMode = 'auto' | 'local' | 'jev'
+export type DecisionProvider = 'jev' | 'local' | 'local-fallback'
+
+export interface DecisionRecord {
+  id: string
+  kind: 'plan-gate' | 'result-check'
+  provider: DecisionProvider
+  choice: string
+  confidence: number
+  taskId?: string
+  createdAt: number
+  note?: string
+}
+
+export interface DecisionEngineStatus {
+  configured: boolean
+  encryptionAvailable: boolean
+  model: string
 }
 
 export interface WorkflowTask {
@@ -152,6 +174,7 @@ export interface WorkflowManifest {
   tasks: WorkflowTask[]
   budget: WorkflowBudget
   tokensUsed: number
+  decisions: DecisionRecord[]
   startedAt: number
   updatedAt: number
   completedAt?: number

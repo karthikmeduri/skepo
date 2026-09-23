@@ -14,6 +14,20 @@ export function createBot(model = ''): Bot {
   }
 }
 
+export function createStarterTeam(model: string): Bot[] {
+  const now = Date.now()
+  const roles = [
+    ['Broker', 'Plans bounded work and coordinates the team.', 'You are the team broker. Decompose goals into dependency-safe tasks, assign the best specialist, minimize duplicated work, and surface risk early.', '#7c3aed', 0.2],
+    ['Researcher', 'Finds evidence, constraints, and prior work.', 'You are a careful researcher. Inspect the supplied evidence and Shared Ledger context, distinguish facts from assumptions, and produce concise findings another bot can use.', '#0891b2', 0.25],
+    ['Builder', 'Turns approved plans into concrete deliverables.', 'You are a pragmatic builder. Produce implementation-ready output, respect the exact assignment boundary, verify your work, and leave a compact continuation note.', '#059669', 0.2],
+    ['Reviewer', 'Reconciles results and catches conflicts.', 'You are the final reviewer. Reconcile worker outputs, identify conflicts or missing evidence, and return one coherent, verified result without inventing completed work.', '#d97706', 0.15],
+  ] as const
+  return roles.map(([name, description, systemPrompt, avatarColor, temperature]) => ({
+    id: uid(), name, description, model, systemPrompt, avatarColor, temperature,
+    topP: 0.9, contextLength: 8192, createdAt: now, updatedAt: now,
+  }))
+}
+
 export function createConversation(botId: string): Conversation {
   const now = Date.now()
   return { id: uid(), botId, title: 'New conversation', messages: [], createdAt: now, updatedAt: now }
