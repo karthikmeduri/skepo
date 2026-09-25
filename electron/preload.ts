@@ -7,6 +7,9 @@ type StreamEvent = import('../src/types').StreamEvent
 type WorkflowEvent = import('../src/types').WorkflowEvent
 type WorkflowStartRequest = import('../src/types').WorkflowStartRequest
 type DecisionEngineStatus = import('../src/types').DecisionEngineStatus
+type BrowserRunRequest = import('../src/types').BrowserRunRequest
+type BrowserRun = import('../src/types').BrowserRun
+type BrowserEvent = import('../src/types').BrowserEvent
 
 // Sandboxed Electron preload scripts execute in a CommonJS-like environment.
 // Keep the runtime import as require() even though the application package is ESM.
@@ -54,6 +57,16 @@ contextBridge.exposeInMainWorld('localbot', {
     const listener = (_event: Electron.IpcRendererEvent, data: WorkflowEvent) => callback(data)
     ipcRenderer.on('workflow:event', listener)
     return () => ipcRenderer.removeListener('workflow:event', listener)
+  },
+  startBrowserRun: (request: BrowserRunRequest): Promise<BrowserRun> => ipcRenderer.invoke('browser:start', request),
+  approveBrowserRun: (runId: string, allowed: boolean): Promise<BrowserRun> => ipcRenderer.invoke('browser:approve', runId, allowed),
+  resumeBrowserRun: (runId: string): Promise<BrowserRun> => ipcRenderer.invoke('browser:resume', runId),
+  cancelBrowserRun: (runId: string): Promise<BrowserRun> => ipcRenderer.invoke('browser:cancel', runId),
+  showBrowserRun: (runId: string): Promise<void> => ipcRenderer.invoke('browser:show', runId),
+  onBrowserEvent: (callback: (event: BrowserEvent) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, data: BrowserEvent) => callback(data)
+    ipcRenderer.on('browser:event', listener)
+    return () => ipcRenderer.removeListener('browser:event', listener)
   },
   windowMinimize: () => ipcRenderer.send('window:minimize'),
   windowMaximize: () => ipcRenderer.send('window:maximize'),

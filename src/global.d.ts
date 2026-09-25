@@ -1,4 +1,4 @@
-import type { AppState, Bot, ChatRequest, ConsultationRequest, DecisionEngineStatus, LedgerNote, OllamaModel, PullProgress, StreamEvent, WorkflowEvent, WorkflowManifest, WorkflowStartRequest, WorkspaceStatus } from './types'
+import type { AppState, Bot, BrowserEvent, BrowserRun, BrowserRunRequest, ChatRequest, ConsultationRequest, DecisionEngineStatus, LedgerNote, OllamaModel, PullProgress, StreamEvent, WorkflowEvent, WorkflowManifest, WorkflowStartRequest, WorkspaceStatus } from './types'
 
 declare global {
   interface Window {
@@ -33,6 +33,12 @@ declare global {
       cancelWorkflow(path: string, sessionId: string): Promise<WorkflowManifest>
       retryWorkflowTask(request: WorkflowStartRequest, sessionId: string, taskId: string): Promise<WorkflowManifest>
       onWorkflowEvent(callback: (event: WorkflowEvent) => void): () => void
+      startBrowserRun(request: BrowserRunRequest): Promise<BrowserRun>
+      approveBrowserRun(runId: string, allowed: boolean): Promise<BrowserRun>
+      resumeBrowserRun(runId: string): Promise<BrowserRun>
+      cancelBrowserRun(runId: string): Promise<BrowserRun>
+      showBrowserRun(runId: string): Promise<void>
+      onBrowserEvent(callback: (event: BrowserEvent) => void): () => void
       windowMinimize(): void
       windowMaximize(): void
       windowClose(): void

@@ -197,3 +197,70 @@ export type WorkflowEvent =
   | { type: 'updated'; manifest: WorkflowManifest }
   | { type: 'workspace-changed'; path: string }
   | { type: 'error'; sessionId?: string; error: string }
+
+export type BrowserMode = 'managed' | 'cdp'
+export type BrowserRunStatus = 'connecting' | 'running' | 'awaiting_approval' | 'awaiting_human' | 'completed' | 'failed' | 'cancelled'
+export type BrowserActionKind = 'navigate' | 'click' | 'type' | 'scroll' | 'extract' | 'done'
+
+export interface BrowserAction {
+  action: BrowserActionKind
+  ref?: number
+  url?: string
+  text?: string
+  direction?: 'up' | 'down'
+  reason: string
+}
+
+export interface BrowserSnapshot {
+  url: string
+  title: string
+  compact: string
+  interactiveCount: number
+  estimatedTokens: number
+  fullEstimatedTokens: number
+  savedTokens: number
+  challengeDetected: boolean
+}
+
+export interface BrowserStep {
+  id: string
+  index: number
+  action: BrowserAction
+  status: 'planned' | 'completed' | 'blocked' | 'failed'
+  createdAt: number
+  snapshot?: BrowserSnapshot
+  note?: string
+}
+
+export interface BrowserRun {
+  id: string
+  goal: string
+  mode: BrowserMode
+  status: BrowserRunStatus
+  startUrl: string
+  currentUrl?: string
+  botName: string
+  botModel: string
+  maxSteps: number
+  steps: BrowserStep[]
+  estimatedTokens: number
+  savedTokens: number
+  startedAt: number
+  updatedAt: number
+  result?: string
+  error?: string
+  pendingAction?: BrowserAction
+}
+
+export interface BrowserRunRequest {
+  workspacePath: string
+  ollamaUrl: string
+  goal: string
+  startUrl: string
+  mode: BrowserMode
+  cdpUrl?: string
+  bot: Bot
+  maxSteps: number
+}
+
+export type BrowserEvent = { type: 'updated'; run: BrowserRun } | { type: 'error'; runId?: string; error: string }

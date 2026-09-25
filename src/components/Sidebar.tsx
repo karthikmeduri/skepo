@@ -1,8 +1,8 @@
-import { Bot as BotIcon, BookOpen, ChevronLeft, ChevronRight, Download, MessageSquare, Network, Plus, Search, Settings, Sparkles } from 'lucide-react'
+import { Bot as BotIcon, BookOpen, ChevronLeft, ChevronRight, Download, MessageSquare, Network, PanelsTopLeft, Plus, Search, Settings, Sparkles } from 'lucide-react'
 import type { Bot, Conversation } from '../types'
 import { formatRelative } from '../lib'
 
-export type View = 'chat' | 'bots' | 'models' | 'ledger' | 'runs' | 'settings'
+export type View = 'chat' | 'bots' | 'models' | 'ledger' | 'runs' | 'web' | 'settings'
 
 interface Props {
   collapsed: boolean
@@ -29,6 +29,7 @@ export function Sidebar(props: Props) {
       <button className={props.view === 'models' ? 'active' : ''} onClick={() => props.onView('models')}><Download size={18} /><span>Models</span></button>
       <button className={props.view === 'ledger' ? 'active' : ''} onClick={() => props.onView('ledger')}><BookOpen size={18} /><span>Shared Ledger</span></button>
       <button className={props.view === 'runs' ? 'active' : ''} onClick={() => props.onView('runs')}><Network size={18} /><span>Execution Board</span></button>
+      <button className={props.view === 'web' ? 'active' : ''} onClick={() => props.onView('web')}><PanelsTopLeft size={18} /><span>Web Harness</span></button>
     </nav>
     {!props.collapsed && <>
       <div className="section-label"><span>Recent</span></div>

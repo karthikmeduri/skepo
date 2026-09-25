@@ -4,9 +4,10 @@ import fs from 'node:fs/promises'
 import { watch as watchFiles, type FSWatcher } from 'node:fs'
 import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import type { AppState, Bot, ChatRequest, ConsultationRequest, LedgerNote, PullProgress, WorkflowManifest, WorkflowStartRequest, WorkspaceStatus } from '../src/types'
+import type { AppState, Bot, BrowserRunRequest, ChatRequest, ConsultationRequest, LedgerNote, PullProgress, WorkflowManifest, WorkflowStartRequest, WorkspaceStatus } from '../src/types'
 import { approveWorkflow, listWorkflows, retryWorkflowTask, setManifestCancelled, setManifestPaused, startWorkflow } from './orchestrator.js'
 import { clearJevApiKey, decisionEngineStatus, runDecision, setJevApiKey } from './decision-engine.js'
+import { approveBrowserRun, cancelBrowserRun, closeBrowserHarness, resumeBrowserRun, showBrowserRun, startBrowserRun } from './browser-harness.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 if (process.env.SKEPO_CAPTURE_PATH) app.disableHardwareAcceleration()
@@ -434,6 +435,11 @@ function registerIpc() {
   ipcMain.handle('workflow:retry-task', async (event, request: WorkflowStartRequest, sessionId: string, taskId: string) => {
     return retryWorkflowTask(request, sessionId, taskId, runModel, relevantNotes, createWorkflowEmitter(event.sender, request), runDecision)
   })
+  ipcMain.handle('browser:start', (event, request: BrowserRunRequest) => startBrowserRun(request, runModel, data => { if (!event.sender.isDestroyed()) event.sender.send('browser:event', data) }))
+  ipcMain.handle('browser:approve', (_event, runId: string, allowed: boolean) => approveBrowserRun(runId, allowed, runModel))
+  ipcMain.handle('browser:resume', (_event, runId: string) => resumeBrowserRun(runId, runModel))
+  ipcMain.handle('browser:cancel', (_event, runId: string) => cancelBrowserRun(runId))
+  ipcMain.handle('browser:show', (_event, runId: string) => showBrowserRun(runId))
   ipcMain.on('window:minimize', (event) => BrowserWindow.fromWebContents(event.sender)?.minimize())
   ipcMain.on('window:maximize', (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
@@ -484,4 +490,4 @@ app.whenReady().then(() => {
   createWindow()
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })
 })
-app.on('window-all-closed', () => { for (const watcher of workspaceWatchers.values()) watcher.close(); workspaceWatchers.clear(); if (process.platform !== 'darwin') app.quit() })
+app.on('window-all-closed', () => { closeBrowserHarness(); for (const watcher of workspaceWatchers.values()) watcher.close(); workspaceWatchers.clear(); if (process.platform !== 'darwin') app.quit() })

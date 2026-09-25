@@ -28,6 +28,7 @@ Your prompts, conversations, work cards, task manifests, and bot definitions rem
 | **Agent studio** | Create specialized agents with individual models, system prompts, context windows, and generation controls. |
 | **Shared Ledger** | Compact Markdown work cards let agents learn what teammates completed without replaying entire conversations. |
 | **Execution Board** | A broker creates a dependency graph, independent workers run in parallel, typed gates verify progress, and a reviewer reconciles the result. |
+| **Web Harness** | A bounded Ollama browser agent reuses a persistent local session, reads compact page deltas, remembers sites in Markdown, and pauses at consequential actions. |
 | **Instant starter team** | The first installed Ollama model automatically powers Broker, Researcher, Builder, and Reviewer roles. |
 | **Human control** | Plan approval, risky-action checkpoints, pause, cancel, retry, leases, and strict token/time budgets. |
 | **Local model management** | Discover, download, inspect, and remove Ollama models directly from the desktop interface. |
@@ -40,6 +41,7 @@ Your prompts, conversations, work cards, task manifests, and bot definitions rem
 - **No pretend autonomy.** The orchestrator uses an explicit dependency graph with application-enforced states and budgets.
 - **No silent collisions.** Task leases prevent two agents from claiming the same work, while reviewer synthesis handles conflicting results.
 - **No mandatory cloud.** Skepo works end-to-end through Ollama; optional Jev gates can be enabled with your own TypeSafe key.
+- **No browser-token flood.** Web Harness sends numbered controls and material page changes instead of repeatedly feeding screenshots or an entire DOM to the model.
 
 Skepo adopts the useful harness principles demonstrated by [JCode](https://github.com/1jehuang/jcode)—automatic relevant-memory recall, visible agent activity, lightweight concurrent sessions, and conflict-aware coordination—while implementing them independently for a Windows-first Ollama team and a portable Markdown execution ledger.
 
@@ -70,7 +72,7 @@ Create the Windows installer with:
 pnpm build
 ```
 
-The NSIS installer is written to `release/Skepo-Setup-0.5.0.exe`.
+The NSIS installer is written to `release/Skepo-Setup-0.6.0.exe`.
 
 ## Shared Ledger
 
@@ -86,6 +88,8 @@ Skepo creates a `.skepo-ledger` directory inside the workspace folder selected b
 │       ├── CURRENT.md
 │       └── journal/*.md
 ├── handoffs/*.md
+├── browser/
+│   └── sites/<hostname>.md
 └── sessions/
     └── <session-id>/
         ├── manifest.json
@@ -113,6 +117,14 @@ Every run includes:
 - Typed plan and result decisions with confidence and provider provenance
 
 Models propose work; Skepo owns the workflow state machine.
+
+## Web Harness
+
+Web Harness gives an Ollama bot a small, application-enforced browser action set: navigate, click a numbered control, type into a numbered field, scroll, extract, or finish. It runs in a persistent Skepo browser profile by default, so legitimate sign-ins survive between tasks without exporting cookies to a model. Advanced users can explicitly connect a Chrome or Edge instance launched with a local remote-debugging endpoint.
+
+Each step uses a compact, text-first page map and sends only material changes after the first snapshot. Useful navigation history is appended to readable files under `.skepo-ledger/browser/sites/`, allowing future runs to reuse site knowledge without replaying earlier prompts.
+
+Skepo asks for approval before consequential clicks such as purchases, publishing, deletion, booking, or transfers. CAPTCHA, “verify you are human,” and similar challenges always pause for manual completion; Skepo does not solve or bypass site protections.
 
 ## Decision engine
 

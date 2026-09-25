@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.0 — Web Harness
+
+- Added a persistent, local browser agent powered by any configured Ollama bot
+- Added compact numbered page maps and delta-only snapshots to reduce context use
+- Added per-site Markdown navigation memory inside the selected workspace
+- Added explicit Chrome/Edge CDP connection for user-started debugging sessions
+- Added bounded step budgets, cancellation, and visible action history
+- Added approval gates for consequential actions and manual handoff for verification challenges
+- Added browser safety and snapshot-compression tests
+
 ## 0.5.0 — Harness and decision layer
 
 - Added an automatic four-role starter team using the first installed Ollama model
