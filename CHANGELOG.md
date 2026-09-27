@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.0 — Local decision intelligence
+
+- Added Laya as an open-weight local System 1 decision provider
+- Added per-bot decision provider selection: workspace, Auto, Laya, Jev, or Rules
+- Added one-click isolated Laya runtime installation and typed-decisions model preparation
+- Added lazy local service startup, CPU thread limits, and idle shutdown
+- Added confidence thresholds with provider fallback and durable provenance
+- Added provider readiness, device, model, progress, and fallback visibility
+- Added live Jev-compatible System One contract tests and per-bot routing tests
+
 ## 0.6.0 — Web Harness
 
 - Added a persistent, local browser agent powered by any configured Ollama bot

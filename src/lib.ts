@@ -10,7 +10,7 @@ export function createBot(model = ''): Bot {
     id: uid(), name: 'New bot', description: 'A private local assistant', model,
     systemPrompt: 'You are a helpful, accurate assistant. Be concise and clear.',
     avatarColor: colors[Math.floor(Math.random() * colors.length)], temperature: 0.7,
-    topP: 0.9, contextLength: 8192, createdAt: now, updatedAt: now,
+    topP: 0.9, contextLength: 8192, decisionMode: 'workspace', createdAt: now, updatedAt: now,
   }
 }
 
@@ -24,7 +24,7 @@ export function createStarterTeam(model: string): Bot[] {
   ] as const
   return roles.map(([name, description, systemPrompt, avatarColor, temperature]) => ({
     id: uid(), name, description, model, systemPrompt, avatarColor, temperature,
-    topP: 0.9, contextLength: 8192, createdAt: now, updatedAt: now,
+    topP: 0.9, contextLength: 8192, decisionMode: 'workspace', createdAt: now, updatedAt: now,
   }))
 }
 

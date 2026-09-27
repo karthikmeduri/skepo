@@ -1,13 +1,18 @@
-import type { AppState, Bot, BrowserEvent, BrowserRun, BrowserRunRequest, ChatRequest, ConsultationRequest, DecisionEngineStatus, LedgerNote, OllamaModel, PullProgress, StreamEvent, WorkflowEvent, WorkflowManifest, WorkflowStartRequest, WorkspaceStatus } from './types'
+import type { AppState, Bot, BrowserEvent, BrowserRun, BrowserRunRequest, ChatRequest, ConsultationRequest, DecisionEngineStatus, LayaProgress, LayaStatus, LedgerNote, OllamaModel, PullProgress, StreamEvent, WorkflowEvent, WorkflowManifest, WorkflowStartRequest, WorkspaceStatus } from './types'
 
 declare global {
   interface Window {
     localbot: {
       loadState(): Promise<AppState>
       saveState(state: AppState): Promise<void>
-      decisionStatus(): Promise<DecisionEngineStatus>
+      decisionStatus(endpoint?: string): Promise<DecisionEngineStatus>
       setJevApiKey(apiKey: string): Promise<DecisionEngineStatus>
       clearJevApiKey(): Promise<DecisionEngineStatus>
+      layaStatus(endpoint: string): Promise<LayaStatus>
+      installLaya(endpoint: string): Promise<LayaStatus>
+      startLaya(endpoint: string): Promise<LayaStatus>
+      stopLaya(): Promise<void>
+      onLayaProgress(callback: (progress: LayaProgress) => void): () => void
       listModels(url: string): Promise<OllamaModel[]>
       checkOllama(url: string): Promise<{ ok: boolean; version?: string; error?: string }>
       startChat(request: ChatRequest, url: string): Promise<void>

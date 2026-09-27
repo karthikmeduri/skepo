@@ -30,6 +30,7 @@ Your prompts, conversations, work cards, task manifests, and bot definitions rem
 | **Execution Board** | A broker creates a dependency graph, independent workers run in parallel, typed gates verify progress, and a reviewer reconciles the result. |
 | **Web Harness** | A bounded Ollama browser agent reuses a persistent local session, reads compact page deltas, remembers sites in Markdown, and pauses at consequential actions. |
 | **Instant starter team** | The first installed Ollama model automatically powers Broker, Researcher, Builder, and Reviewer roles. |
+| **Decision intelligence** | Choose local Laya, hosted Jev, deterministic rules, or an automatic confidence-aware fallback chain for each bot. |
 | **Human control** | Plan approval, risky-action checkpoints, pause, cancel, retry, leases, and strict token/time budgets. |
 | **Local model management** | Discover, download, inspect, and remove Ollama models directly from the desktop interface. |
 | **Inspectable by design** | Workflows are ordinary JSON and Markdown files that can be reviewed, backed up, or committed to Git. |
@@ -72,7 +73,7 @@ Create the Windows installer with:
 pnpm build
 ```
 
-The NSIS installer is written to `release/Skepo-Setup-0.6.0.exe`.
+The NSIS installer is written to `release/Skepo-Setup-0.7.0.exe`.
 
 ## Shared Ledger
 
@@ -130,11 +131,16 @@ Skepo asks for approval before consequential clicks such as purchases, publishin
 
 Skepo separates generative work from bounded decisions. Ollama agents still plan, research, build, and review. A lightweight decision layer answers only closed questions such as whether a plan may proceed or a worker result should be accepted, retried, or reviewed.
 
-- **Auto** uses Jev when a key is configured and falls back locally.
+- **Auto** prefers local Laya, then Jev when configured, then deterministic rules.
+- **Laya Local** runs the Apache-2.0 [`typed-decisions`](https://github.com/NandhaKishorM/laya) checkpoint on the user's computer through a managed, isolated runtime.
 - **Local only** uses deterministic, zero-token gates with no network request.
 - **Prefer Jev** requests TypeSafe AI's `jev-latest` model and safely falls back if it is unavailable.
 
-Jev is optional. Its API key is encrypted through Windows credential protection and is never written to a workspace, manifest, log, or Git. When Jev is active, the relevant plan or task result is sent to TypeSafe AI; the UI states this before configuration.
+Each bot can inherit the workspace default or independently select Auto, Laya, Jev, or Rules. Decision records include the provider, confidence, fallback note, and timestamp.
+
+Skepo's one-click Laya setup requires Python 3.10–3.13. It creates an isolated environment under the application data directory, installs Laya's official server package, and downloads only the specialized typed-decisions checkpoint. The first setup requires internet access and approximately 850 MB for model files. Subsequent decisions run locally; Skepo limits CPU threads and stops its managed service after inactivity. An already-running Jev-compatible Laya endpoint can also be supplied.
+
+Jev is optional. Its API key is encrypted through Windows credential protection and is never written to a workspace, manifest, log, or Git. When Jev is active, the relevant plan or task result is sent to TypeSafe AI; the UI states this before configuration. Laya requests remain on the configured endpoint; the default endpoint is localhost.
 
 ## Privacy and security
 

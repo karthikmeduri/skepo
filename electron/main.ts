@@ -8,6 +8,7 @@ import type { AppState, Bot, BrowserRunRequest, ChatRequest, ConsultationRequest
 import { approveWorkflow, listWorkflows, retryWorkflowTask, setManifestCancelled, setManifestPaused, startWorkflow } from './orchestrator.js'
 import { clearJevApiKey, decisionEngineStatus, runDecision, setJevApiKey } from './decision-engine.js'
 import { approveBrowserRun, cancelBrowserRun, closeBrowserHarness, resumeBrowserRun, showBrowserRun, startBrowserRun } from './browser-harness.js'
+import { checkLaya, installManagedLaya, startManagedLaya, stopManagedLaya } from './laya-runtime.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 if (process.env.SKEPO_CAPTURE_PATH) app.disableHardwareAcceleration()
@@ -26,6 +27,7 @@ const defaultState: AppState = {
     sharedMemoryEnabled: true,
     maxSharedNotes: 4,
     decisionMode: 'auto',
+    layaEndpoint: 'http://127.0.0.1:8000',
   },
 }
 
@@ -172,7 +174,7 @@ async function runModel(bot: Bot, messages: { role: string; content: string }[],
 async function syncWorkspaceBots(workspace: string, bots: Bot[]) {
   const destination = path.join(ledgerRoot(workspace), 'bots.json')
   const temp = `${destination}.tmp`
-  const portable = bots.map(({ id, name, description, model, systemPrompt, avatarColor, temperature, topP, contextLength, createdAt, updatedAt }) => ({ id, name, description, model, systemPrompt, avatarColor, temperature, topP, contextLength, createdAt, updatedAt }))
+  const portable = bots.map(({ id, name, description, model, systemPrompt, avatarColor, temperature, topP, contextLength, decisionMode, createdAt, updatedAt }) => ({ id, name, description, model, systemPrompt, avatarColor, temperature, topP, contextLength, decisionMode: decisionMode ?? 'workspace', createdAt, updatedAt }))
   await fs.mkdir(path.dirname(destination), { recursive: true })
   await fs.writeFile(temp, JSON.stringify({ version: 1, updatedAt: Date.now(), bots: portable }, null, 2), 'utf8')
   await fs.rename(temp, destination)
@@ -241,9 +243,13 @@ async function writeState(state: AppState) {
 function registerIpc() {
   ipcMain.handle('state:load', readState)
   ipcMain.handle('state:save', (_event, state: AppState) => writeState(state))
-  ipcMain.handle('decision:status', () => decisionEngineStatus())
+  ipcMain.handle('decision:status', (_event, endpoint?: string) => decisionEngineStatus(endpoint))
   ipcMain.handle('decision:set-key', (_event, apiKey: string) => setJevApiKey(apiKey))
   ipcMain.handle('decision:clear-key', () => clearJevApiKey())
+  ipcMain.handle('decision:laya-status', (_event, endpoint: string) => checkLaya(endpoint))
+  ipcMain.handle('decision:laya-install', (event, endpoint: string) => installManagedLaya(endpoint, progress => { if (!event.sender.isDestroyed()) event.sender.send('decision:laya-progress', progress) }))
+  ipcMain.handle('decision:laya-start', (event, endpoint: string) => startManagedLaya(endpoint, progress => { if (!event.sender.isDestroyed()) event.sender.send('decision:laya-progress', progress) }))
+  ipcMain.handle('decision:laya-stop', () => stopManagedLaya())
 
   ipcMain.handle('ollama:check', async (_event, rawUrl: string) => {
     try {
@@ -482,7 +488,7 @@ function createWindow() {
   })
   const devUrl = process.env.VITE_DEV_SERVER_URL
   if (devUrl) void win.loadURL(devUrl)
-  else void win.loadFile(path.join(__dirname, '../../dist/index.html'))
+  else void win.loadFile(path.join(__dirname, '../../dist/index.html'), process.env.SKEPO_CAPTURE_VIEW ? { query: { view: process.env.SKEPO_CAPTURE_VIEW } } : undefined)
 }
 
 app.whenReady().then(() => {
@@ -490,4 +496,4 @@ app.whenReady().then(() => {
   createWindow()
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })
 })
-app.on('window-all-closed', () => { closeBrowserHarness(); for (const watcher of workspaceWatchers.values()) watcher.close(); workspaceWatchers.clear(); if (process.platform !== 'darwin') app.quit() })
+app.on('window-all-closed', () => { closeBrowserHarness(); stopManagedLaya(); for (const watcher of workspaceWatchers.values()) watcher.close(); workspaceWatchers.clear(); if (process.platform !== 'darwin') app.quit() })

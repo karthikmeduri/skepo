@@ -10,6 +10,7 @@ export interface Bot {
   temperature: number
   topP: number
   contextLength: number
+  decisionMode?: BotDecisionMode
   createdAt: number
   updatedAt: number
 }
@@ -42,6 +43,7 @@ export interface AppSettings {
   sharedMemoryEnabled: boolean
   maxSharedNotes: number
   decisionMode: DecisionMode
+  layaEndpoint: string
 }
 
 export interface OllamaModel {
@@ -123,8 +125,9 @@ export interface WorkflowBudget {
   decisionMode: DecisionMode
 }
 
-export type DecisionMode = 'auto' | 'local' | 'jev'
-export type DecisionProvider = 'jev' | 'local' | 'local-fallback'
+export type DecisionMode = 'auto' | 'local' | 'laya' | 'jev'
+export type BotDecisionMode = 'workspace' | DecisionMode
+export type DecisionProvider = 'jev' | 'laya' | 'local' | 'local-fallback'
 
 export interface DecisionRecord {
   id: string
@@ -141,7 +144,22 @@ export interface DecisionEngineStatus {
   configured: boolean
   encryptionAvailable: boolean
   model: string
+  laya: LayaStatus
 }
+
+export interface LayaStatus {
+  endpoint: string
+  reachable: boolean
+  managedInstalled: boolean
+  running: boolean
+  installing: boolean
+  model: string
+  device?: string
+  loaded?: string[]
+  error?: string
+}
+
+export interface LayaProgress { phase: 'checking' | 'creating-runtime' | 'installing' | 'starting' | 'downloading-model' | 'ready' | 'error'; message: string; percent?: number }
 
 export interface WorkflowTask {
   id: string
@@ -191,6 +209,7 @@ export interface WorkflowStartRequest {
   workerBotIds: string[]
   bots: Bot[]
   budget: WorkflowBudget
+  layaEndpoint: string
 }
 
 export type WorkflowEvent =

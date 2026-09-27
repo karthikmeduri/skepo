@@ -10,6 +10,8 @@ type DecisionEngineStatus = import('../src/types').DecisionEngineStatus
 type BrowserRunRequest = import('../src/types').BrowserRunRequest
 type BrowserRun = import('../src/types').BrowserRun
 type BrowserEvent = import('../src/types').BrowserEvent
+type LayaStatus = import('../src/types').LayaStatus
+type LayaProgress = import('../src/types').LayaProgress
 
 // Sandboxed Electron preload scripts execute in a CommonJS-like environment.
 // Keep the runtime import as require() even though the application package is ESM.
@@ -18,9 +20,18 @@ const { contextBridge, ipcRenderer } = require('electron') as typeof import('ele
 contextBridge.exposeInMainWorld('localbot', {
   loadState: () => ipcRenderer.invoke('state:load'),
   saveState: (state: AppState) => ipcRenderer.invoke('state:save', state),
-  decisionStatus: (): Promise<DecisionEngineStatus> => ipcRenderer.invoke('decision:status'),
+  decisionStatus: (endpoint?: string): Promise<DecisionEngineStatus> => ipcRenderer.invoke('decision:status', endpoint),
   setJevApiKey: (apiKey: string): Promise<DecisionEngineStatus> => ipcRenderer.invoke('decision:set-key', apiKey),
   clearJevApiKey: (): Promise<DecisionEngineStatus> => ipcRenderer.invoke('decision:clear-key'),
+  layaStatus: (endpoint: string): Promise<LayaStatus> => ipcRenderer.invoke('decision:laya-status', endpoint),
+  installLaya: (endpoint: string): Promise<LayaStatus> => ipcRenderer.invoke('decision:laya-install', endpoint),
+  startLaya: (endpoint: string): Promise<LayaStatus> => ipcRenderer.invoke('decision:laya-start', endpoint),
+  stopLaya: (): Promise<void> => ipcRenderer.invoke('decision:laya-stop'),
+  onLayaProgress: (callback: (progress: LayaProgress) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, data: LayaProgress) => callback(data)
+    ipcRenderer.on('decision:laya-progress', listener)
+    return () => ipcRenderer.removeListener('decision:laya-progress', listener)
+  },
   listModels: (url: string) => ipcRenderer.invoke('ollama:models', url),
   checkOllama: (url: string) => ipcRenderer.invoke('ollama:check', url),
   startChat: (request: ChatRequest, url: string) => ipcRenderer.invoke('ollama:chat', request, url),

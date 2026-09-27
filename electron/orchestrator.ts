@@ -109,6 +109,10 @@ function botById(request: WorkflowStartRequest, id: string) {
   return bot
 }
 
+function decisionModeFor(bot: Bot, request: WorkflowStartRequest) {
+  return bot.decisionMode && bot.decisionMode !== 'workspace' ? bot.decisionMode : (request.budget.decisionMode ?? 'auto')
+}
+
 function contextFrom(notes: LedgerNote[]) {
   return notes.length ? `\n\nRelevant Shared Ledger cards:\n${notes.map(note => `- ${note.botName} / ${note.title}: ${note.outcome}`).join('\n')}` : ''
 }
@@ -147,7 +151,7 @@ export async function startWorkflow(request: WorkflowStartRequest, runModel: Mod
     manifest.tasks = normalizePlan(extractObject(planning.content), request)
     if (decide) {
       const decision = await decide({
-        kind: 'plan-gate', mode: request.budget.decisionMode ?? 'auto',
+        kind: 'plan-gate', mode: decisionModeFor(broker, request), layaEndpoint: request.layaEndpoint,
         state: { goal: manifest.goal, tasks: manifest.tasks.map(({ id, title, description, dependencies, risk }) => ({ id, title, description, dependencies, risk })) },
         instructions: 'Should this bounded execution plan proceed automatically, require human review, or be blocked as unsafe or incoherent?',
         options: { proceed: 'The plan is coherent and safe to execute.', review: 'The plan needs human review before execution.', block: 'The plan is unsafe or not executable.' },
@@ -185,7 +189,7 @@ async function executeTask(request: WorkflowStartRequest, manifest: WorkflowMani
     task.result = result.content; task.tokenCount += result.tokens; manifest.tokensUsed += result.tokens; task.lease = undefined
     if (decide) {
       const decision = await decide({
-        kind: 'result-check', mode: request.budget.decisionMode ?? 'auto', taskId: task.id,
+        kind: 'result-check', mode: decisionModeFor(worker, request), layaEndpoint: request.layaEndpoint, taskId: task.id,
         state: { goal: manifest.goal, task: { title: task.title, description: task.description }, result: result.content },
         instructions: 'Does this worker result satisfy its assigned task well enough to accept, should it retry, or does it need human review?',
         options: { accept: 'The result substantially satisfies the assignment.', retry: 'The result is incomplete or failed and should be retried.', review: 'A human should inspect this uncertain or risky result.' },

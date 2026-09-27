@@ -3,6 +3,8 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import type { DecisionEngineStatus, DecisionMode, DecisionRecord } from '../src/types'
+import { checkLaya, ensureLaya, touchLaya } from './laya-runtime.js'
+import { requestSystemOneChoice } from './system-one.js'
 
 export interface DecisionRequest {
   kind: DecisionRecord['kind']
@@ -11,6 +13,7 @@ export interface DecisionRequest {
   instructions: string
   options: Record<string, string>
   taskId?: string
+  layaEndpoint?: string
 }
 
 const model = 'jev-latest'
@@ -42,8 +45,8 @@ export async function clearJevApiKey() {
   return decisionEngineStatus()
 }
 
-export async function decisionEngineStatus(): Promise<DecisionEngineStatus> {
-  return { configured: !!await readKey(), encryptionAvailable: safeStorage.isEncryptionAvailable(), model }
+export async function decisionEngineStatus(layaEndpoint = 'http://127.0.0.1:8000'): Promise<DecisionEngineStatus> {
+  return { configured: !!await readKey(), encryptionAvailable: safeStorage.isEncryptionAvailable(), model, laya: await checkLaya(layaEndpoint) }
 }
 
 function localDecision(request: DecisionRequest, provider: DecisionRecord['provider'] = 'local', note?: string): DecisionRecord {
@@ -82,13 +85,28 @@ async function jevDecision(request: DecisionRequest, apiKey: string): Promise<De
   return { id: randomUUID(), kind: request.kind, provider: 'jev', choice: answer.choice, confidence: answer.confidence ?? probability ?? 0, taskId: request.taskId, createdAt: Date.now() }
 }
 
+async function layaDecision(request: DecisionRequest): Promise<DecisionRecord> {
+  const endpoint = request.layaEndpoint?.trim() || 'http://127.0.0.1:8000'
+  await ensureLaya(endpoint)
+  const answer = await requestSystemOneChoice({ endpoint, model: 'typed-decisions', state: request.state, instructions: request.instructions, options: request.options })
+  const confidence = answer.confidence
+  if (confidence < 0.55) throw new Error(`Laya confidence was below the Skepo threshold (${confidence.toFixed(2)}).`)
+  touchLaya()
+  return { id: randomUUID(), kind: request.kind, provider: 'laya', choice: answer.choice, confidence, taskId: request.taskId, createdAt: Date.now() }
+}
+
 export async function runDecision(request: DecisionRequest): Promise<DecisionRecord> {
   if (request.mode === 'local') return localDecision(request)
   const key = await readKey()
-  if (!key) return localDecision(request, request.mode === 'jev' ? 'local-fallback' : 'local', request.mode === 'jev' ? 'Jev is not configured; used the zero-token local gate.' : undefined)
-  try { return await jevDecision(request, key) }
-  catch (error) {
-    const note = `Jev unavailable; local gate used (${error instanceof Error ? error.message : String(error)}).`
-    return localDecision(request, 'local-fallback', note)
+  const order: ('laya' | 'jev')[] = request.mode === 'jev' ? ['jev', 'laya'] : ['laya', 'jev']
+  const failures: string[] = []
+  for (const provider of order) {
+    if (provider === 'jev' && !key) { failures.push('Jev is not configured'); continue }
+    try {
+      const decision = provider === 'laya' ? await layaDecision(request) : await jevDecision(request, key!)
+      if (failures.length) decision.note = `Fallback selected after ${failures.join('; ')}.`
+      return decision
+    } catch (error) { failures.push(`${provider === 'laya' ? 'Laya' : 'Jev'} unavailable (${error instanceof Error ? error.message : String(error)})`) }
   }
+  return localDecision(request, 'local-fallback', `${failures.join('; ')}; used the zero-token local gate.`)
 }

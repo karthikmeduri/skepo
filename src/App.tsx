@@ -6,7 +6,7 @@ import { ExecutionBoard } from './components/ExecutionBoard'
 import { LedgerView } from './components/LedgerView'
 import { ModelsView } from './components/ModelsView'
 import { SearchDialog } from './components/SearchDialog'
-import { SettingsView } from './components/SettingsView'
+import { SettingsView } from './components/DecisionSettingsView'
 import { Sidebar, type View } from './components/Sidebar'
 import { Titlebar } from './components/Titlebar'
 import { Toasts, type ToastData } from './components/Toast'
@@ -18,13 +18,16 @@ const skepoIcon = new URL('../assets/brand/skepo-icon.png', import.meta.url).hre
 
 const emptyState: AppState = {
   bots: [], conversations: [],
-  settings: { ollamaUrl: 'http://127.0.0.1:11434', theme: 'dark', sendOnEnter: true, compactMode: false, workspacePath: '', sharedMemoryEnabled: true, maxSharedNotes: 4, decisionMode: 'auto' },
+  settings: { ollamaUrl: 'http://127.0.0.1:11434', theme: 'dark', sendOnEnter: true, compactMode: false, workspacePath: '', sharedMemoryEnabled: true, maxSharedNotes: 4, decisionMode: 'auto', layaEndpoint: 'http://127.0.0.1:8000' },
 }
 
 export default function App() {
   const [state, setState] = useState<AppState>(emptyState)
   const [loaded, setLoaded] = useState(false)
-  const [view, setView] = useState<View>('chat')
+  const [view, setView] = useState<View>(() => {
+    const candidate = new URLSearchParams(location.search).get('view') as View | null
+    return candidate && ['chat','bots','models','ledger','runs','web','settings'].includes(candidate) ? candidate : 'chat'
+  })
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [activeConversationId, setActiveConversationId] = useState<string>()
   const [preferredBotId, setPreferredBotId] = useState<string>()
@@ -39,7 +42,7 @@ export default function App() {
   const [ledgerLoading, setLedgerLoading] = useState(false)
   const [workflows, setWorkflows] = useState<WorkflowManifest[]>([])
   const [workflowBusy, setWorkflowBusy] = useState(false)
-  const [decisionStatus, setDecisionStatus] = useState<DecisionEngineStatus>({ configured: false, encryptionAvailable: true, model: 'jev-latest' })
+  const [decisionStatus, setDecisionStatus] = useState<DecisionEngineStatus>({ configured: false, encryptionAvailable: true, model: 'jev-latest', laya: { endpoint: 'http://127.0.0.1:8000', reachable: false, managedInstalled: false, running: false, installing: false, model: 'typed-decisions' } })
   const [toasts, setToasts] = useState<ToastData[]>([])
   const activeRequest = useRef<{ requestId: string; conversationId: string; assistantId: string; bot: Bot; request: string; answer: string; title: string }>()
   const stateRef = useRef(state)
@@ -64,6 +67,11 @@ export default function App() {
   async function refreshWorkflows(workspace = stateRef.current.settings.workspacePath) {
     if (!workspace) { setWorkflows([]); return }
     try { setWorkflows(await window.localbot.listWorkflows(workspace)) }
+    catch (error) { toast('error', error instanceof Error ? error.message : String(error)) }
+  }
+
+  async function refreshDecision(endpoint = stateRef.current.settings.layaEndpoint) {
+    try { setDecisionStatus(await window.localbot.decisionStatus(endpoint)) }
     catch (error) { toast('error', error instanceof Error ? error.message : String(error)) }
   }
 
@@ -106,7 +114,7 @@ export default function App() {
       if (!alive) return
       setState(saved); stateRef.current = saved; setPreferredBotId(saved.bots[0]?.id)
       const latest = [...saved.conversations].sort((a, b) => b.updatedAt - a.updatedAt)[0]
-      setActiveConversationId(latest?.id); if (!saved.settings.workspacePath) setView('ledger'); setLoaded(true); void refreshModels(saved.settings.ollamaUrl, true); void window.localbot.decisionStatus().then(setDecisionStatus); if (saved.settings.workspacePath) { void refreshLedger(saved.settings.workspacePath); void refreshWorkflows(saved.settings.workspacePath) }
+      setActiveConversationId(latest?.id); if (!saved.settings.workspacePath && !new URLSearchParams(location.search).has('view')) setView('ledger'); setLoaded(true); void refreshModels(saved.settings.ollamaUrl, true); void window.localbot.decisionStatus(saved.settings.layaEndpoint).then(setDecisionStatus); if (saved.settings.workspacePath) { void refreshLedger(saved.settings.workspacePath); void refreshWorkflows(saved.settings.workspacePath) }
     })
     return () => { alive = false }
   }, [])
@@ -250,7 +258,7 @@ export default function App() {
   }
 
   function workflowRequest(workflow: WorkflowManifest): WorkflowStartRequest {
-    return { workspacePath: stateRef.current.settings.workspacePath, ollamaUrl: stateRef.current.settings.ollamaUrl, goal: workflow.goal, orchestratorBotId: workflow.orchestratorBotId, reviewerBotId: workflow.reviewerBotId, workerBotIds: workflow.workerBotIds, bots: stateRef.current.bots, budget: workflow.budget }
+    return { workspacePath: stateRef.current.settings.workspacePath, ollamaUrl: stateRef.current.settings.ollamaUrl, layaEndpoint: stateRef.current.settings.layaEndpoint, goal: workflow.goal, orchestratorBotId: workflow.orchestratorBotId, reviewerBotId: workflow.reviewerBotId, workerBotIds: workflow.workerBotIds, bots: stateRef.current.bots, budget: workflow.budget }
   }
 
   async function startRun(request: WorkflowStartRequest) {
@@ -271,9 +279,9 @@ export default function App() {
     if (view === 'bots') return <BotsView bots={state.bots} models={models} onSave={saveBot} onDelete={deleteBot} onChat={selectBot} />
     if (view === 'models') return <ModelsView models={models} connected={connection.connected} version={connection.version} error={connection.error} loading={modelsLoading} pullProgress={pullProgress} onRefresh={() => void refreshModels()} onPull={pullModel} onDelete={async name => { try { await window.localbot.deleteModel(name, state.settings.ollamaUrl); toast('success', `${name} deleted`); await refreshModels(state.settings.ollamaUrl, true) } catch (error) { toast('error', error instanceof Error ? error.message : String(error)) } }} />
     if (view === 'ledger') return <LedgerView status={ledgerStatus} loading={ledgerLoading} onChoose={() => void chooseWorkspace()} onRefresh={() => void refreshLedger()} onOpen={() => void window.localbot.openWorkspace(state.settings.workspacePath)} onSettings={() => setView('settings')} />
-    if (view === 'runs') return <ExecutionBoard bots={state.bots} workflows={workflows} workspacePath={state.settings.workspacePath} ollamaUrl={state.settings.ollamaUrl} decisionMode={state.settings.decisionMode} connected={connection.connected} busy={workflowBusy} onStart={startRun} onRefresh={() => void refreshWorkflows()} onSetupWorkspace={() => setView('ledger')} onApprove={async workflow => { setWorkflowBusy(true); try { await window.localbot.approveWorkflow(workflowRequest(workflow), workflow.sessionId); toast('success', 'Plan approved; workers are starting') } catch (error) { toast('error', error instanceof Error ? error.message : String(error)) } finally { setWorkflowBusy(false) } }} onPause={async (workflow, paused) => { try { if (paused) await window.localbot.pauseWorkflow(state.settings.workspacePath, workflow.sessionId, true); else await window.localbot.approveWorkflow(workflowRequest(workflow), workflow.sessionId); toast('success', paused ? 'Workflow paused' : 'Workflow resumed') } catch (error) { toast('error', error instanceof Error ? error.message : String(error)) } }} onCancel={async workflow => { if (!confirm('Cancel this workflow? Pending work will stop.')) return; try { await window.localbot.cancelWorkflow(state.settings.workspacePath, workflow.sessionId); toast('success', 'Workflow cancelled') } catch (error) { toast('error', error instanceof Error ? error.message : String(error)) } }} onRetry={async (workflow, taskId) => { try { await window.localbot.retryWorkflowTask(workflowRequest(workflow), workflow.sessionId, taskId); toast('success', 'Task queued for retry') } catch (error) { toast('error', error instanceof Error ? error.message : String(error)) } }} />
+    if (view === 'runs') return <ExecutionBoard bots={state.bots} workflows={workflows} workspacePath={state.settings.workspacePath} ollamaUrl={state.settings.ollamaUrl} layaEndpoint={state.settings.layaEndpoint} decisionMode={state.settings.decisionMode} connected={connection.connected} busy={workflowBusy} onStart={startRun} onRefresh={() => void refreshWorkflows()} onSetupWorkspace={() => setView('ledger')} onApprove={async workflow => { setWorkflowBusy(true); try { await window.localbot.approveWorkflow(workflowRequest(workflow), workflow.sessionId); toast('success', 'Plan approved; workers are starting') } catch (error) { toast('error', error instanceof Error ? error.message : String(error)) } finally { setWorkflowBusy(false) } }} onPause={async (workflow, paused) => { try { if (paused) await window.localbot.pauseWorkflow(state.settings.workspacePath, workflow.sessionId, true); else await window.localbot.approveWorkflow(workflowRequest(workflow), workflow.sessionId); toast('success', paused ? 'Workflow paused' : 'Workflow resumed') } catch (error) { toast('error', error instanceof Error ? error.message : String(error)) } }} onCancel={async workflow => { if (!confirm('Cancel this workflow? Pending work will stop.')) return; try { await window.localbot.cancelWorkflow(state.settings.workspacePath, workflow.sessionId); toast('success', 'Workflow cancelled') } catch (error) { toast('error', error instanceof Error ? error.message : String(error)) } }} onRetry={async (workflow, taskId) => { try { await window.localbot.retryWorkflowTask(workflowRequest(workflow), workflow.sessionId, taskId); toast('success', 'Task queued for retry') } catch (error) { toast('error', error instanceof Error ? error.message : String(error)) } }} />
     if (view === 'web') return <WebHarnessView bots={state.bots} workspacePath={state.settings.workspacePath} ollamaUrl={state.settings.ollamaUrl} connected={connection.connected} onSetupWorkspace={() => setView('ledger')} onError={message => toast('error', message)} />
-    if (view === 'settings') return <SettingsView settings={state.settings} status={connection} decisionStatus={decisionStatus} onSetJevKey={async key => { try { const result = await window.localbot.setJevApiKey(key); setDecisionStatus(result); toast('success', 'Jev API key saved') } catch (error) { toast('error', error instanceof Error ? error.message : String(error)); throw error } }} onClearJevKey={async () => { try { const result = await window.localbot.clearJevApiKey(); setDecisionStatus(result); toast('success', 'Jev key removed; local decisions remain active') } catch (error) { toast('error', error instanceof Error ? error.message : String(error)); throw error } }} onChooseWorkspace={chooseWorkspace} onTest={url => { setConnection(current => ({ ...current, checking: true })); void refreshModels(url) }} onSave={(settings: AppSettings) => { setState(current => ({ ...current, settings })); toast('success', 'Settings saved'); void refreshModels(settings.ollamaUrl, true); if (settings.workspacePath) void window.localbot.initWorkspace(settings.workspacePath, state.bots).then(setLedgerStatus); else setLedgerStatus({ initialized: false, path: '', noteCount: 0, botCount: 0, recentNotes: [] }) }} />
+    if (view === 'settings') return <SettingsView settings={state.settings} status={connection} decisionStatus={decisionStatus} onRefreshDecision={refreshDecision} onSetJevKey={async key => { try { await window.localbot.setJevApiKey(key); await refreshDecision(); toast('success', 'Jev API key saved') } catch (error) { toast('error', error instanceof Error ? error.message : String(error)); throw error } }} onClearJevKey={async () => { try { await window.localbot.clearJevApiKey(); await refreshDecision(); toast('success', 'Jev key removed; local decisions remain active') } catch (error) { toast('error', error instanceof Error ? error.message : String(error)); throw error } }} onChooseWorkspace={chooseWorkspace} onTest={url => { setConnection(current => ({ ...current, checking: true })); void refreshModels(url) }} onSave={(settings: AppSettings) => { setState(current => ({ ...current, settings })); toast('success', 'Settings saved'); void refreshModels(settings.ollamaUrl, true); void refreshDecision(settings.layaEndpoint); if (settings.workspacePath) void window.localbot.initWorkspace(settings.workspacePath, state.bots).then(setLedgerStatus); else setLedgerStatus({ initialized: false, path: '', noteCount: 0, botCount: 0, recentNotes: [] }) }} />
     return <ChatView bot={bot} conversation={conversation} bots={state.bots} streaming={!!activeRequest.current} sendOnEnter={state.settings.sendOnEnter} ledgerEnabled={!!state.settings.workspacePath && state.settings.sharedMemoryEnabled} onConsult={() => setConsultOpen(true)} onSelectBot={selectBot} onSend={content => void sendMessage(content)} onStop={() => void stopGeneration()} onRegenerate={regenerate} onDelete={() => { if (conversation && confirm('Delete this conversation?')) { setState(current => ({ ...current, conversations: current.conversations.filter(item => item.id !== conversation.id) })); setActiveConversationId(undefined) } }} onExport={() => { if (conversation) void window.localbot.exportConversation(toMarkdown(conversation, bot), conversation.title) }} onOpenBots={() => setView('bots')} />
   }, [view, state, models, connection, modelsLoading, pullProgress, activeConversationId, preferredBotId, ledgerStatus, ledgerLoading, workflows, workflowBusy, decisionStatus])
 
