@@ -12,6 +12,7 @@ type BrowserRun = import('../src/types').BrowserRun
 type BrowserEvent = import('../src/types').BrowserEvent
 type LayaStatus = import('../src/types').LayaStatus
 type LayaProgress = import('../src/types').LayaProgress
+type ModelProvider = import('../src/types').ModelProvider
 
 // Sandboxed Electron preload scripts execute in a CommonJS-like environment.
 // Keep the runtime import as require() even though the application package is ESM.
@@ -34,6 +35,10 @@ contextBridge.exposeInMainWorld('localbot', {
   },
   listModels: (url: string) => ipcRenderer.invoke('ollama:models', url),
   checkOllama: (url: string) => ipcRenderer.invoke('ollama:check', url),
+  providerStatuses: (providers: ModelProvider[]) => ipcRenderer.invoke('provider:statuses', providers),
+  setProviderKey: (providerId: string, apiKey: string) => ipcRenderer.invoke('provider:set-key', providerId, apiKey),
+  clearProviderKey: (providerId: string) => ipcRenderer.invoke('provider:clear-key', providerId),
+  testProvider: (provider: ModelProvider, ollamaUrl: string) => ipcRenderer.invoke('provider:test', provider, ollamaUrl),
   startChat: (request: ChatRequest, url: string) => ipcRenderer.invoke('ollama:chat', request, url),
   stopChat: (requestId: string) => ipcRenderer.invoke('ollama:stop', requestId),
   onChatEvent: (callback: (event: StreamEvent) => void) => {

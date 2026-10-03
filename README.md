@@ -3,13 +3,14 @@
 </p>
 
 <p align="center">
-  <strong>A private Windows workspace where local AI agents plan, collaborate, and execute through Ollama.</strong>
+  <strong>A local-first Windows workspace where AI agents plan, collaborate, and execute across models you control.</strong>
 </p>
 
 <p align="center">
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-8B5CF6.svg" /></a>
   <img alt="Windows 10 and 11" src="https://img.shields.io/badge/Windows-10%20%7C%2011-2563EB.svg" />
   <img alt="Powered by Ollama" src="https://img.shields.io/badge/Ollama-local%20models-A78BFA.svg" />
+  <img alt="Bring your own model API" src="https://img.shields.io/badge/model%20APIs-bring%20your%20own-06B6D4.svg" />
   <img alt="Local first" src="https://img.shields.io/badge/architecture-local--first-22C55E.svg" />
 </p>
 
@@ -17,18 +18,23 @@
   <img src="assets/screenshots/skepo-chat.png" alt="Skepo desktop interface showing a local multi-agent release plan" width="100%" />
 </p>
 
+<p align="center">
+  <img src="assets/screenshots/skepo-agents.png" alt="Skepo agent studio showing original visual personas powered by local and cloud models" width="100%" />
+</p>
+
 ## Local agents that can actually work together
 
-Skepo is an open-source Windows desktop application for building private AI agent teams with models installed through [Ollama](https://ollama.com/). It combines familiar chat, portable agent profiles, durable shared memory, and a safety-first autonomous execution board—without requiring a cloud account or hosted vector database.
+Skepo is an open-source Windows desktop application for building AI agent teams with local models from [Ollama](https://ollama.com/), user-owned cloud APIs, or both at once. It combines familiar chat, expressive agent profiles, durable shared memory, and a safety-first autonomous execution board—without requiring a hosted vector database or a Skepo account.
 
-Your prompts, conversations, work cards, task manifests, and bot definitions remain on hardware you control.
+Your conversations, work cards, task manifests, provider configuration, and bot definitions remain on hardware you control. A prompt leaves the device only when you assign that bot to a cloud provider.
 
 | Capability | What it provides |
 |---|---|
-| **Agent studio** | Create specialized agents with individual models, system prompts, context windows, and generation controls. |
+| **Agent studio** | Create recognizable agents with animated visual personas, individual providers, models, prompts, context windows, and generation controls. |
+| **Model gateway** | Run Ollama beside OpenAI, Anthropic, DeepSeek, GLM/Z.AI, Kimi, or any OpenAI-compatible endpoint using your own accounts. |
 | **Shared Ledger** | Compact Markdown work cards let agents learn what teammates completed without replaying entire conversations. |
 | **Execution Board** | A broker creates a dependency graph, independent workers run in parallel, typed gates verify progress, and a reviewer reconciles the result. |
-| **Web Harness** | A bounded Ollama browser agent reuses a persistent local session, reads compact page deltas, remembers sites in Markdown, and pauses at consequential actions. |
+| **Web Harness** | A bounded browser agent reuses a persistent local session, reads compact page deltas, remembers sites in Markdown, and pauses at consequential actions. |
 | **Instant starter team** | The first installed Ollama model automatically powers Broker, Researcher, Builder, and Reviewer roles. |
 | **Decision intelligence** | Choose local Laya, hosted Jev, deterministic rules, or an automatic confidence-aware fallback chain for each bot. |
 | **Human control** | Plan approval, risky-action checkpoints, pause, cancel, retry, leases, and strict token/time budgets. |
@@ -41,7 +47,8 @@ Your prompts, conversations, work cards, task manifests, and bot definitions rem
 - **No opaque memory database.** Relevant cards are selected locally using visible lexical scoring, recency, and cross-agent value.
 - **No pretend autonomy.** The orchestrator uses an explicit dependency graph with application-enforced states and budgets.
 - **No silent collisions.** Task leases prevent two agents from claiming the same work, while reviewer synthesis handles conflicting results.
-- **No mandatory cloud.** Skepo works end-to-end through Ollama; optional Jev gates can be enabled with your own TypeSafe key.
+- **No provider lock-in.** Each bot independently selects Ollama or a user-configured API, so local and cloud teammates can share one execution board.
+- **No leaked credentials.** API keys are encrypted through Windows and excluded from bot profiles, workspaces, exports, and Git.
 - **No browser-token flood.** Web Harness sends numbered controls and material page changes instead of repeatedly feeding screenshots or an entire DOM to the model.
 
 Skepo adopts the useful harness principles demonstrated by [JCode](https://github.com/1jehuang/jcode)—automatic relevant-memory recall, visible agent activity, lightweight concurrent sessions, and conflict-aware coordination—while implementing them independently for a Windows-first Ollama team and a portable Markdown execution ledger.
@@ -51,10 +58,9 @@ Skepo adopts the useful harness principles demonstrated by [JCode](https://githu
 ### Requirements
 
 - Windows 10 or 11
-- [Ollama for Windows](https://ollama.com/download/windows)
-- At least one downloaded Ollama model
+- [Ollama for Windows](https://ollama.com/download/windows) with a downloaded model, **or** an API key for a supported provider
 
-Start Ollama and open Skepo. Skepo detects the first installed model and creates a ready-to-run four-agent team automatically. Choose a workspace folder under **Shared Ledger** to enable durable team memory and autonomous runs.
+For a completely local setup, start Ollama and open Skepo. It detects the first installed model and creates a four-agent team automatically. For cloud models, open **Settings → Model providers**, save your key, then assign the provider and exact model ID to any bot. Ollama and API-backed bots can work in the same team. Choose a workspace folder under **Shared Ledger** to enable durable memory and autonomous runs.
 
 ### Build from source
 
@@ -73,7 +79,22 @@ Create the Windows installer with:
 pnpm build
 ```
 
-The NSIS installer is written to `release/Skepo-Setup-0.7.0.exe`.
+The NSIS installer is written to `release/Skepo-Setup-0.8.0.exe`.
+
+## Model providers
+
+Skepo includes native routing for:
+
+- Ollama
+- OpenAI
+- Anthropic
+- DeepSeek
+- GLM through Z.AI
+- Kimi
+- Google Gemini, xAI, OpenRouter, Groq, Mistral AI, Together AI, and Perplexity through their compatible APIs
+- Any API implementing the OpenAI Chat Completions protocol
+
+Provider URLs are editable and additional compatible gateways can be added from Settings. Each bot records only a provider ID and model ID, keeping its definition portable. API keys live in a separate vault encrypted by Windows credential protection. Streaming chat, direct bot consultations, autonomous workers, broker planning, reviewer synthesis, and Web Harness all use the bot's selected provider.
 
 ## Shared Ledger
 
@@ -121,7 +142,7 @@ Models propose work; Skepo owns the workflow state machine.
 
 ## Web Harness
 
-Web Harness gives an Ollama bot a small, application-enforced browser action set: navigate, click a numbered control, type into a numbered field, scroll, extract, or finish. It runs in a persistent Skepo browser profile by default, so legitimate sign-ins survive between tasks without exporting cookies to a model. Advanced users can explicitly connect a Chrome or Edge instance launched with a local remote-debugging endpoint.
+Web Harness gives a configured bot a small, application-enforced browser action set: navigate, click a numbered control, type into a numbered field, scroll, extract, or finish. It runs in a persistent Skepo browser profile by default, so legitimate sign-ins survive between tasks without exporting cookies to a model. Advanced users can explicitly connect a Chrome or Edge instance launched with a local remote-debugging endpoint.
 
 Each step uses a compact, text-first page map and sends only material changes after the first snapshot. Useful navigation history is appended to readable files under `.skepo-ledger/browser/sites/`, allowing future runs to reuse site knowledge without replaying earlier prompts.
 
@@ -129,7 +150,7 @@ Skepo asks for approval before consequential clicks such as purchases, publishin
 
 ## Decision engine
 
-Skepo separates generative work from bounded decisions. Ollama agents still plan, research, build, and review. A lightweight decision layer answers only closed questions such as whether a plan may proceed or a worker result should be accepted, retried, or reviewed.
+Skepo separates generative work from bounded decisions. Configured agents still plan, research, build, and review through their chosen model providers. A lightweight decision layer answers only closed questions such as whether a plan may proceed or a worker result should be accepted, retried, or reviewed.
 
 - **Auto** prefers local Laya, then Jev when configured, then deterministic rules.
 - **Laya Local** runs the Apache-2.0 [`typed-decisions`](https://github.com/NandhaKishorM/laya) checkpoint on the user's computer through a managed, isolated runtime.
@@ -144,7 +165,7 @@ Jev is optional. Its API key is encrypted through Windows credential protection 
 
 ## Privacy and security
 
-Skepo includes no telemetry, remote fonts, or advertising SDK. By default, requests are sent only to the configured Ollama URL. If you explicitly configure Jev, bounded workflow state is also sent to TypeSafe AI for typed decisions. If either endpoint points to another computer, the corresponding request travels to that computer.
+Skepo includes no telemetry, remote fonts, or advertising SDK. By default, requests are sent only to the configured Ollama URL. When you assign a bot to a cloud provider, that bot's relevant prompts are sent directly to the provider endpoint you configured. If you enable Jev, bounded workflow state can also be sent to TypeSafe AI for typed decisions. The application shows these routes explicitly instead of implying that cloud-backed work remains local.
 
 The Electron renderer uses context isolation, sandboxing, a narrow IPC bridge, and local atomic persistence. Shared Ledger files are written only beneath the workspace folder explicitly selected by the user.
 

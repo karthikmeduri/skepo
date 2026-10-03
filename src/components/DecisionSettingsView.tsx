@@ -1,16 +1,18 @@
-import { BookOpen, BrainCircuit, CheckCircle2, Cloud, Cpu, Download, ExternalLink, FolderOpen, KeyRound, LoaderCircle, Play, RefreshCw, ServerOff, Square, Trash2 } from 'lucide-react'
+import { BookOpen, BrainCircuit, CheckCircle2, Cloud, Cpu, Download, ExternalLink, FolderOpen, KeyRound, LoaderCircle, LockKeyhole, Play, Plus, RefreshCw, ServerOff, Sparkles, Square, Trash2, Wifi } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import type { AppSettings, DecisionEngineStatus, LayaProgress } from '../types'
+import type { AppSettings, DecisionEngineStatus, LayaProgress, ModelProvider, ProviderConnectionStatus } from '../types'
 
-interface Props { settings: AppSettings; status: { connected: boolean; version?: string; error?: string; checking: boolean }; decisionStatus: DecisionEngineStatus; onSave(settings: AppSettings): void; onTest(url: string): void; onChooseWorkspace(): Promise<string | undefined>; onSetJevKey(key: string): Promise<void>; onClearJevKey(): Promise<void>; onRefreshDecision(endpoint?: string): Promise<void> }
+interface Props { settings: AppSettings; providers: ModelProvider[]; providerStatuses: ProviderConnectionStatus[]; status: { connected: boolean; version?: string; error?: string; checking: boolean }; decisionStatus: DecisionEngineStatus; onSave(settings: AppSettings, providers: ModelProvider[]): void; onTest(url: string): void; onChooseWorkspace(): Promise<string | undefined>; onSetJevKey(key: string): Promise<void>; onClearJevKey(): Promise<void>; onRefreshDecision(endpoint?: string): Promise<void>; onSetProviderKey(id: string, key: string): Promise<void>; onClearProviderKey(id: string): Promise<void>; onTestProvider(provider: ModelProvider): Promise<{ ok: boolean; detail?: string; models?: string[] }> }
 
-export function SettingsView({ settings, status, decisionStatus, onSave, onTest, onChooseWorkspace, onSetJevKey, onClearJevKey, onRefreshDecision }: Props) {
+export function SettingsView({ settings, providers, providerStatuses, status, decisionStatus, onSave, onTest, onChooseWorkspace, onSetJevKey, onClearJevKey, onRefreshDecision, onSetProviderKey, onClearProviderKey, onTestProvider }: Props) {
   const [draft, setDraft] = useState(settings)
+  const [providerDrafts, setProviderDrafts] = useState(providers)
   const [jevKey, setJevKey] = useState('')
   const [jevBusy, setJevBusy] = useState(false)
   const [layaBusy, setLayaBusy] = useState(false)
   const [layaProgress, setLayaProgress] = useState<LayaProgress>()
   useEffect(() => setDraft(settings), [settings])
+  useEffect(() => setProviderDrafts(providers), [providers])
   useEffect(() => window.localbot.onLayaProgress(setLayaProgress), [])
 
   async function layaAction(action: 'install' | 'start' | 'stop' | 'check') {
@@ -28,6 +30,7 @@ export function SettingsView({ settings, status, decisionStatus, onSave, onTest,
   return <main className="page-view settings-page">
     <div className="page-heading"><div><span className="eyebrow">Preferences</span><h1>Settings</h1><p>Configure your local connection, decision intelligence, and workspace behavior.</p></div></div>
     <section className="settings-section"><h2>Ollama connection</h2><p>Skepo talks directly to Ollama's HTTP API.</p><label>Server URL<div className="inline-field"><input value={draft.ollamaUrl} onChange={e => setDraft({ ...draft, ollamaUrl: e.target.value })} /><button className="secondary" onClick={() => onTest(draft.ollamaUrl)} disabled={status.checking}><RefreshCw size={16} className={status.checking ? 'spinning' : ''} />Test</button></div></label><div className={`inline-status ${status.connected ? 'success' : 'error'}`}>{status.connected ? <CheckCircle2 size={16} /> : <ServerOff size={16} />}<span>{status.connected ? `Connected${status.version ? ` to Ollama ${status.version}` : ''}` : status.error ?? 'Not connected'}</span></div></section>
+    <ProviderManager providers={providerDrafts} statuses={providerStatuses} onChange={setProviderDrafts} onSetKey={onSetProviderKey} onClearKey={onClearProviderKey} onTest={onTestProvider} />
     <section className="settings-section memory-settings"><div className="section-title-icon"><BookOpen size={18} /><div><h2>Shared Ledger</h2><p>File-native memory and handoffs between bots.</p></div></div><label>Workspace folder<div className="inline-field"><input value={draft.workspacePath} readOnly placeholder="Choose a folder on any local drive" /><button className="secondary" onClick={async () => { const selected = await onChooseWorkspace(); if (selected) setDraft({ ...draft, workspacePath: selected }) }}><FolderOpen size={16} />Browse</button></div></label><Toggle label="Share relevant work cards" description="Add a small set of locally selected Markdown notes to new requests." checked={draft.sharedMemoryEnabled} onChange={sharedMemoryEnabled => setDraft({ ...draft, sharedMemoryEnabled })} /><label>Maximum cards per request<select value={draft.maxSharedNotes} onChange={e => setDraft({ ...draft, maxSharedNotes: Number(e.target.value) })}>{[1,2,3,4,5,6,8].map(count => <option key={count} value={count}>{count} card{count === 1 ? '' : 's'}</option>)}</select><span className="field-help">A lower number saves context tokens. Four is a balanced default.</span></label></section>
     <section className="settings-section decision-settings">
       <div className="section-title-icon"><BrainCircuit size={18} /><div><h2>Decision intelligence</h2><p>System 1 engines make fast typed choices while Ollama performs generative work.</p></div></div>
@@ -38,9 +41,35 @@ export function SettingsView({ settings, status, decisionStatus, onSave, onTest,
     </section>
     <section className="settings-section"><h2>Appearance</h2><div className="segmented" role="group" aria-label="Theme">{(['dark','light','system'] as const).map(theme => <button className={draft.theme === theme ? 'active' : ''} key={theme} onClick={() => setDraft({ ...draft, theme })}>{theme[0].toUpperCase() + theme.slice(1)}</button>)}</div><Toggle label="Compact conversation list" description="Fit more items in the sidebar." checked={draft.compactMode} onChange={compactMode => setDraft({ ...draft, compactMode })} /></section>
     <section className="settings-section"><h2>Chat</h2><Toggle label="Send with Enter" description="Use Shift + Enter for a new line. When off, use Ctrl + Enter to send." checked={draft.sendOnEnter} onChange={sendOnEnter => setDraft({ ...draft, sendOnEnter })} /></section>
-    <section className="settings-section about"><h2>About Skepo</h2><p>Version 0.7.0 · Your agent profiles and chat history are stored locally in your Windows app data folder.</p><a href="https://ollama.com/library" target="_blank" rel="noreferrer">Browse the Ollama model library<ExternalLink size={14} /></a></section>
-    <div className="settings-save"><button className="primary" onClick={() => onSave(draft)}>Save settings</button></div>
+    <section className="settings-section about"><h2>About Skepo</h2><p>Version 0.8.0 · Your agent profiles and chat history are stored locally in your Windows app data folder.</p><a href="https://ollama.com/library" target="_blank" rel="noreferrer">Browse the Ollama model library<ExternalLink size={14} /></a></section>
+    <div className="settings-save"><button className="primary" onClick={() => onSave(draft, providerDrafts)}>Save settings</button></div>
   </main>
+}
+
+function ProviderManager({ providers, statuses, onChange, onSetKey, onClearKey, onTest }: { providers: ModelProvider[]; statuses: ProviderConnectionStatus[]; onChange(value: ModelProvider[]): void; onSetKey(id: string, key: string): Promise<void>; onClearKey(id: string): Promise<void>; onTest(provider: ModelProvider): Promise<unknown> }) {
+  const [keys, setKeys] = useState<Record<string,string>>({})
+  const [savedKeys, setSavedKeys] = useState<Record<string,boolean>>({})
+  const [errors, setErrors] = useState<Record<string,string>>({})
+  const [busy, setBusy] = useState<string>()
+  const cloudProviders = providers.filter(provider => provider.kind !== 'ollama')
+  function update(id: string, patch: Partial<ModelProvider>) { onChange(providers.map(provider => provider.id === id ? { ...provider, ...patch } : provider)) }
+  function addCustom() { const id = `compatible-${crypto.randomUUID()}`; onChange([...providers, { id, kind: 'openai-compatible', name: 'Compatible API', baseUrl: 'https://', enabled: true }]) }
+  return <section className="settings-section model-provider-settings">
+    <div className="section-title-icon"><Sparkles size={18} /><div><h2>Model providers</h2><p>Mix local models with your own cloud API accounts. Credentials stay encrypted on this Windows computer.</p></div></div>
+    <div className="provider-security"><LockKeyhole size={16} /><span>Keys are encrypted through Windows and are never written into bot profiles, the Shared Ledger, exports, or Git.</span></div>
+    <div className="model-provider-list">{cloudProviders.map(provider => {
+      const status = statuses.find(item => item.id === provider.id)
+      const configured = savedKeys[provider.id] ?? status?.configured ?? false
+      return <article className={`model-provider-row ${configured ? 'configured' : ''}`} key={provider.id}>
+        <header><span className="provider-monogram">{provider.name.slice(0,2).toUpperCase()}</span><div><input aria-label="Provider name" value={provider.name} onChange={event => update(provider.id, { name: event.target.value })} /><small>{provider.kind === 'openai-compatible' ? 'OpenAI-compatible endpoint' : 'Built-in adapter'}</small></div><label className="provider-enable"><input type="checkbox" checked={provider.enabled} onChange={event => update(provider.id, { enabled: event.target.checked })} /><span>{provider.enabled ? 'Enabled' : 'Disabled'}</span></label></header>
+        <label>Base URL<input value={provider.baseUrl} onChange={event => update(provider.id, { baseUrl: event.target.value })} /></label>
+        <label>API key<div className="inline-field"><input type="password" autoComplete="off" value={keys[provider.id] ?? ''} placeholder={configured ? 'Stored securely · enter to replace' : 'Paste your API key'} onChange={event => setKeys(current => ({ ...current, [provider.id]: event.target.value }))} /><button className="secondary" disabled={!keys[provider.id]?.trim() || busy === provider.id} onClick={async () => { setBusy(provider.id); setErrors(current => ({ ...current, [provider.id]: '' })); try { await onSetKey(provider.id, keys[provider.id]); setKeys(current => ({ ...current, [provider.id]: '' })); setSavedKeys(current => ({ ...current, [provider.id]: true })) } catch (error) { setErrors(current => ({ ...current, [provider.id]: error instanceof Error ? error.message : String(error) })) } finally { setBusy(undefined) } }}><KeyRound size={14} />Save</button>{configured && <button className="icon-button danger" aria-label={`Remove ${provider.name} key`} onClick={async () => { try { await onClearKey(provider.id); setSavedKeys(current => ({ ...current, [provider.id]: false })) } catch (error) { setErrors(current => ({ ...current, [provider.id]: error instanceof Error ? error.message : String(error) })) } }}><Trash2 size={15} /></button>}</div></label>
+        {errors[provider.id] && <p className="provider-error">{errors[provider.id]}</p>}
+        <footer><span className={configured ? 'credential-ready' : ''}>{configured ? <><CheckCircle2 size={13} />Credential ready</> : 'Key required'}</span><button className="secondary" disabled={!provider.enabled || !configured || busy === provider.id} onClick={async () => { setBusy(provider.id); setErrors(current => ({ ...current, [provider.id]: '' })); try { await onTest(provider) } catch (error) { setErrors(current => ({ ...current, [provider.id]: error instanceof Error ? error.message : String(error) })) } finally { setBusy(undefined) } }}><Wifi size={14} />Test API</button>{provider.id.startsWith('compatible-') && <button className="secondary danger" onClick={() => onChange(providers.filter(item => item.id !== provider.id))}>Remove</button>}</footer>
+      </article>
+    })}</div>
+    <button className="secondary add-provider" onClick={addCustom}><Plus size={15} />Add OpenAI-compatible API</button>
+  </section>
 }
 
 function ProviderCard({ kind, icon, title, subtitle, badge, ready, description, meta }: { kind: 'laya' | 'jev'; icon: React.ReactNode; title: string; subtitle: string; badge: string; ready: boolean; description: string; meta: (string | undefined)[] }) { return <article className={`provider-card ${ready ? 'ready' : ''}`}><header><span className={`provider-icon ${kind}`}>{icon}</span><div><h3>{title}</h3><span>{subtitle}</span></div><b>{badge}</b></header><p>{description}</p><div className="provider-meta">{meta.filter(Boolean).map(value => <span key={value}>{value}</span>)}</div></article> }

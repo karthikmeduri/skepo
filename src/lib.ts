@@ -1,13 +1,14 @@
-import type { Bot, Conversation, Message } from './types'
+import type { Bot, BotPersona, Conversation, Message } from './types'
 
 export const uid = () => crypto.randomUUID()
 
 export const colors = ['#7c3aed', '#2563eb', '#0891b2', '#059669', '#d97706', '#dc2626', '#db2777']
+export const personas: BotPersona[] = ['pulse', 'orbit', 'bloom', 'prism', 'nova', 'wave']
 
 export function createBot(model = ''): Bot {
   const now = Date.now()
   return {
-    id: uid(), name: 'New bot', description: 'A private local assistant', model,
+    id: uid(), name: 'New bot', description: 'A private AI teammate', model, providerId: 'ollama', persona: personas[Math.floor(Math.random() * personas.length)],
     systemPrompt: 'You are a helpful, accurate assistant. Be concise and clear.',
     avatarColor: colors[Math.floor(Math.random() * colors.length)], temperature: 0.7,
     topP: 0.9, contextLength: 8192, decisionMode: 'workspace', createdAt: now, updatedAt: now,
@@ -22,8 +23,8 @@ export function createStarterTeam(model: string): Bot[] {
     ['Builder', 'Turns approved plans into concrete deliverables.', 'You are a pragmatic builder. Produce implementation-ready output, respect the exact assignment boundary, verify your work, and leave a compact continuation note.', '#059669', 0.2],
     ['Reviewer', 'Reconciles results and catches conflicts.', 'You are the final reviewer. Reconcile worker outputs, identify conflicts or missing evidence, and return one coherent, verified result without inventing completed work.', '#d97706', 0.15],
   ] as const
-  return roles.map(([name, description, systemPrompt, avatarColor, temperature]) => ({
-    id: uid(), name, description, model, systemPrompt, avatarColor, temperature,
+  return roles.map(([name, description, systemPrompt, avatarColor, temperature], index) => ({
+    id: uid(), name, description, model, providerId: 'ollama', persona: personas[index], systemPrompt, avatarColor, temperature,
     topP: 0.9, contextLength: 8192, decisionMode: 'workspace', createdAt: now, updatedAt: now,
   }))
 }

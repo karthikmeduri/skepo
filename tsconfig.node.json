@@ -10,5 +10,5 @@
     "outDir": "dist-electron",
     "rootDir": "."
   },
-  "include": ["electron", "src/types.ts"]
+  "include": ["electron", "src/types.ts", "src/providers.ts"]
 }

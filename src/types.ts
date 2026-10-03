@@ -1,10 +1,33 @@
 export type Role = 'user' | 'assistant' | 'system'
 
+export type ModelProviderKind = 'ollama' | 'openai' | 'anthropic' | 'deepseek' | 'glm' | 'kimi' | 'openai-compatible'
+export type BotPersona = 'pulse' | 'orbit' | 'bloom' | 'prism' | 'nova' | 'wave'
+
+export interface ModelProvider {
+  id: string
+  kind: ModelProviderKind
+  name: string
+  baseUrl: string
+  enabled: boolean
+  configured?: boolean
+}
+
+export interface ProviderConnectionStatus {
+  id: string
+  configured: boolean
+  encryptionAvailable: boolean
+  ok?: boolean
+  detail?: string
+  models?: string[]
+}
+
 export interface Bot {
   id: string
   name: string
   description: string
   model: string
+  providerId?: string
+  persona?: BotPersona
   systemPrompt: string
   avatarColor: string
   temperature: number
@@ -59,6 +82,7 @@ export interface AppState {
   bots: Bot[]
   conversations: Conversation[]
   settings: AppSettings
+  providers: ModelProvider[]
 }
 
 export type StreamEvent =

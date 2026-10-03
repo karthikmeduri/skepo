@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.8.0 — Personas and model freedom
+
+- Added encrypted bring-your-own-key providers for OpenAI, Anthropic, DeepSeek, GLM/Z.AI, and Kimi
+- Added unlimited custom OpenAI-compatible endpoints with editable base URLs
+- Routed streaming chat, consultations, workflows, review, and Web Harness through each bot's selected provider
+- Added an original animated persona system with six configurable identities and seven colorways
+- Added provider-aware bot profiles, readiness indicators, API tests, and local/cloud route disclosure
+- Kept credentials out of application state, portable bot definitions, Shared Ledger files, exports, and Git
+- Added migration support so existing Ollama bots continue working without reconfiguration
+
 ## 0.7.0 — Local decision intelligence
 
 - Added Laya as an open-weight local System 1 decision provider

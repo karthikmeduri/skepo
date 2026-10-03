@@ -1,4 +1,4 @@
-import type { AppState, Bot, BrowserEvent, BrowserRun, BrowserRunRequest, ChatRequest, ConsultationRequest, DecisionEngineStatus, LayaProgress, LayaStatus, LedgerNote, OllamaModel, PullProgress, StreamEvent, WorkflowEvent, WorkflowManifest, WorkflowStartRequest, WorkspaceStatus } from './types'
+import type { AppState, Bot, BrowserEvent, BrowserRun, BrowserRunRequest, ChatRequest, ConsultationRequest, DecisionEngineStatus, LayaProgress, LayaStatus, LedgerNote, ModelProvider, OllamaModel, ProviderConnectionStatus, PullProgress, StreamEvent, WorkflowEvent, WorkflowManifest, WorkflowStartRequest, WorkspaceStatus } from './types'
 
 declare global {
   interface Window {
@@ -15,6 +15,10 @@ declare global {
       onLayaProgress(callback: (progress: LayaProgress) => void): () => void
       listModels(url: string): Promise<OllamaModel[]>
       checkOllama(url: string): Promise<{ ok: boolean; version?: string; error?: string }>
+      providerStatuses(providers: ModelProvider[]): Promise<ProviderConnectionStatus[]>
+      setProviderKey(providerId: string, apiKey: string): Promise<ProviderConnectionStatus>
+      clearProviderKey(providerId: string): Promise<ProviderConnectionStatus>
+      testProvider(provider: ModelProvider, ollamaUrl: string): Promise<{ ok: boolean; detail?: string; models?: string[] }>
       startChat(request: ChatRequest, url: string): Promise<void>
       stopChat(requestId: string): Promise<void>
       onChatEvent(callback: (event: StreamEvent) => void): () => void

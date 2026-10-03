@@ -4,20 +4,25 @@ import fs from 'node:fs/promises'
 import { watch as watchFiles, type FSWatcher } from 'node:fs'
 import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import type { AppState, Bot, BrowserRunRequest, ChatRequest, ConsultationRequest, LedgerNote, PullProgress, WorkflowManifest, WorkflowStartRequest, WorkspaceStatus } from '../src/types'
+import type { AppState, Bot, BrowserRunRequest, ChatRequest, ConsultationRequest, LedgerNote, ModelProvider, PullProgress, WorkflowManifest, WorkflowStartRequest, WorkspaceStatus } from '../src/types'
+import { builtInProviders, normalizeProviders } from '../src/providers.js'
 import { approveWorkflow, listWorkflows, retryWorkflowTask, setManifestCancelled, setManifestPaused, startWorkflow } from './orchestrator.js'
 import { clearJevApiKey, decisionEngineStatus, runDecision, setJevApiKey } from './decision-engine.js'
 import { approveBrowserRun, cancelBrowserRun, closeBrowserHarness, resumeBrowserRun, showBrowserRun, startBrowserRun } from './browser-harness.js'
 import { checkLaya, installManagedLaya, startManagedLaya, stopManagedLaya } from './laya-runtime.js'
+import { runProviderModel, testProvider } from './model-provider.js'
+import { clearProviderKey, providerKeyStatus, setProviderKey } from './provider-vault.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 if (process.env.SKEPO_CAPTURE_PATH) app.disableHardwareAcceleration()
 const activeRequests = new Map<string, AbortController>()
 const workspaceWatchers = new Map<string, FSWatcher>()
+let providerConfigs: ModelProvider[] = structuredClone(builtInProviders)
 
 const defaultState: AppState = {
   bots: [],
   conversations: [],
+  providers: structuredClone(builtInProviders),
   settings: {
     ollamaUrl: 'http://127.0.0.1:11434',
     theme: 'dark',
@@ -160,21 +165,21 @@ async function fetchOllama(url: string, init?: RequestInit) {
   }
 }
 
+function providerFor(bot: Bot, ollamaUrl?: string) {
+  const id = bot.providerId || 'ollama'
+  const provider = providerConfigs.find(item => item.id === id)
+  if (!provider) throw new Error(`The model provider for ${bot.name} no longer exists.`)
+  return id === 'ollama' && ollamaUrl ? { ...provider, baseUrl: ollamaUrl } : provider
+}
+
 async function runModel(bot: Bot, messages: { role: string; content: string }[], rawUrl: string, timeoutMs = 180_000) {
-  const response = await fetchOllama(`${cleanBaseUrl(rawUrl)}/api/chat`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(timeoutMs),
-    body: JSON.stringify({ model: bot.model, stream: false, messages, options: { temperature: bot.temperature, top_p: bot.topP, num_ctx: bot.contextLength } }),
-  })
-  if (!response.ok) throw new Error(await response.text() || `Ollama returned HTTP ${response.status}`)
-  const data = await response.json() as { message?: { content?: string }; error?: string; prompt_eval_count?: number; eval_count?: number }
-  if (data.error) throw new Error(data.error)
-  return { content: data.message?.content?.trim() ?? '', tokens: (data.prompt_eval_count ?? 0) + (data.eval_count ?? 0) }
+  return runProviderModel(providerFor(bot, rawUrl), bot, messages, timeoutMs)
 }
 
 async function syncWorkspaceBots(workspace: string, bots: Bot[]) {
   const destination = path.join(ledgerRoot(workspace), 'bots.json')
   const temp = `${destination}.tmp`
-  const portable = bots.map(({ id, name, description, model, systemPrompt, avatarColor, temperature, topP, contextLength, decisionMode, createdAt, updatedAt }) => ({ id, name, description, model, systemPrompt, avatarColor, temperature, topP, contextLength, decisionMode: decisionMode ?? 'workspace', createdAt, updatedAt }))
+  const portable = bots.map(({ id, name, description, model, providerId, persona, systemPrompt, avatarColor, temperature, topP, contextLength, decisionMode, createdAt, updatedAt }) => ({ id, name, description, model, providerId: providerId ?? 'ollama', persona: persona ?? 'pulse', systemPrompt, avatarColor, temperature, topP, contextLength, decisionMode: decisionMode ?? 'workspace', createdAt, updatedAt }))
   await fs.mkdir(path.dirname(destination), { recursive: true })
   await fs.writeFile(temp, JSON.stringify({ version: 1, updatedAt: Date.now(), bots: portable }, null, 2), 'utf8')
   await fs.rename(temp, destination)
@@ -220,15 +225,20 @@ async function readState(): Promise<AppState> {
   for (const candidate of candidates) {
     try {
       const value = JSON.parse(await fs.readFile(candidate, 'utf8')) as Partial<AppState>
+      const bots = Array.isArray(value.bots) ? value.bots.map(bot => ({ ...bot, providerId: bot.providerId || 'ollama', persona: bot.persona || 'pulse' })) : []
+      const providers = normalizeProviders(value.providers, value.settings?.ollamaUrl || defaultState.settings.ollamaUrl)
       const state = {
-        bots: Array.isArray(value.bots) ? value.bots : [],
+        bots,
         conversations: Array.isArray(value.conversations) ? value.conversations : [],
         settings: { ...defaultState.settings, ...value.settings },
+        providers,
       }
+      providerConfigs = providers
       if (candidate !== statePath()) await writeState(state)
       return state
     } catch { /* Try the next current or legacy state location. */ }
   }
+  providerConfigs = structuredClone(defaultState.providers)
   return structuredClone(defaultState)
 }
 
@@ -236,7 +246,9 @@ async function writeState(state: AppState) {
   const destination = statePath()
   const temp = `${destination}.tmp`
   await fs.mkdir(path.dirname(destination), { recursive: true })
-  await fs.writeFile(temp, JSON.stringify(state, null, 2), 'utf8')
+  const normalized = { ...state, providers: normalizeProviders(state.providers, state.settings.ollamaUrl) }
+  providerConfigs = normalized.providers
+  await fs.writeFile(temp, JSON.stringify(normalized, null, 2), 'utf8')
   await fs.rename(temp, destination)
 }
 
@@ -269,66 +281,26 @@ function registerIpc() {
     return data.models ?? []
   })
 
+  ipcMain.handle('provider:statuses', async (_event, providers: ModelProvider[]) => Promise.all(providers.map(provider => provider.kind === 'ollama'
+    ? Promise.resolve({ id: provider.id, configured: true, encryptionAvailable: true })
+    : providerKeyStatus(provider.id))))
+  ipcMain.handle('provider:set-key', async (_event, providerId: string, apiKey: string) => { await setProviderKey(providerId, apiKey); return providerKeyStatus(providerId) })
+  ipcMain.handle('provider:clear-key', async (_event, providerId: string) => { await clearProviderKey(providerId); return providerKeyStatus(providerId) })
+  ipcMain.handle('provider:test', async (_event, provider: ModelProvider, ollamaUrl: string) => testProvider(provider.id === 'ollama' ? { ...provider, baseUrl: ollamaUrl } : provider))
+
   ipcMain.handle('ollama:chat', async (event, request: ChatRequest, rawUrl: string) => {
     const controller = new AbortController()
     activeRequests.get(request.requestId)?.abort()
     activeRequests.set(request.requestId, controller)
     const startedAt = performance.now()
-    let evalCount = 0
-    let evalDuration = 0
     try {
-      const messages = request.bot.systemPrompt.trim()
-        ? [{ role: 'system', content: request.bot.systemPrompt.trim() }, ...request.messages]
-        : request.messages
-      const response = await fetchOllama(`${cleanBaseUrl(rawUrl)}/api/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: request.bot.model,
-          messages,
-          stream: true,
-          options: {
-            temperature: request.bot.temperature,
-            top_p: request.bot.topP,
-            num_ctx: request.bot.contextLength,
-          },
-        }),
-        signal: controller.signal,
-      })
-      if (!response.ok || !response.body) {
-        const detail = await response.text()
-        throw new Error(detail || `Ollama returned HTTP ${response.status}`)
-      }
-      const reader = response.body.getReader()
-      const decoder = new TextDecoder()
-      let buffer = ''
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n')
-        buffer = lines.pop() ?? ''
-        for (const line of lines) {
-          if (!line.trim()) continue
-          const packet = JSON.parse(line) as {
-            message?: { content?: string }
-            error?: string
-            eval_count?: number
-            eval_duration?: number
-          }
-          if (packet.error) throw new Error(packet.error)
-          if (packet.message?.content) {
-            event.sender.send('ollama:chat-event', { type: 'chunk', requestId: request.requestId, content: packet.message.content })
-          }
-          evalCount = packet.eval_count ?? evalCount
-          evalDuration = packet.eval_duration ?? evalDuration
-        }
-      }
-      const tokensPerSecond = evalDuration > 0 ? evalCount / (evalDuration / 1e9) : undefined
+      const result = await runProviderModel(providerFor(request.bot, rawUrl), request.bot, request.messages, 180_000, content => event.sender.send('ollama:chat-event', { type: 'chunk', requestId: request.requestId, content }), controller.signal)
+      const elapsed = performance.now() - startedAt
+      const tokensPerSecond = result.tokens > 0 && elapsed > 0 ? result.tokens / (elapsed / 1000) : undefined
       event.sender.send('ollama:chat-event', {
         type: 'done',
         requestId: request.requestId,
-        stats: { tokensPerSecond, totalDuration: performance.now() - startedAt },
+        stats: { tokensPerSecond, totalDuration: elapsed },
       })
     } catch (error) {
       if (!controller.signal.aborted) {
@@ -406,22 +378,8 @@ function registerIpc() {
   })
   ipcMain.handle('ollama:consult', async (_event, request: ConsultationRequest) => {
     const context = request.context.length ? `\n\nRelevant Shared Ledger cards:\n${request.context.map(note => `- ${note.botName} / ${note.title}: ${note.outcome}`).join('\n')}` : ''
-    const response = await fetchOllama(`${cleanBaseUrl(request.ollamaUrl)}/api/chat`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(180_000),
-      body: JSON.stringify({
-        model: request.consultant.model,
-        stream: false,
-        messages: [
-          { role: 'system', content: `${request.consultant.systemPrompt}\n\nYou are consulting for another AI bot named ${request.requester.name}. Produce a compact handoff: state your conclusion, key evidence, risks, and exact next actions. Do not restate the whole task.` },
-          { role: 'user', content: `${request.task}${context}` },
-        ],
-        options: { temperature: request.consultant.temperature, top_p: request.consultant.topP, num_ctx: request.consultant.contextLength },
-      }),
-    })
-    if (!response.ok) throw new Error(await response.text() || `Ollama returned HTTP ${response.status}`)
-    const data = await response.json() as { message?: { content?: string }; error?: string }
-    if (data.error) throw new Error(data.error)
-    return data.message?.content?.trim() ?? ''
+    const consultingBot = { ...request.consultant, systemPrompt: `${request.consultant.systemPrompt}\n\nYou are consulting for another AI bot named ${request.requester.name}. Produce a compact handoff: state your conclusion, key evidence, risks, and exact next actions. Do not restate the whole task.` }
+    return (await runProviderModel(providerFor(consultingBot, request.ollamaUrl), consultingBot, [{ role: 'user', content: `${request.task}${context}` }], 180_000)).content
   })
   ipcMain.handle('workflow:list', (_event, workspace: string) => listWorkflows(workspace))
   ipcMain.handle('workflow:start', async (event, request: WorkflowStartRequest) => {

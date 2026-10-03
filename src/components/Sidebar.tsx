@@ -46,7 +46,7 @@ export function Sidebar(props: Props) {
     </>}
     <div className="sidebar-footer">
       <button className={props.view === 'settings' ? 'active' : ''} onClick={() => props.onView('settings')}><Settings size={18} /><span>Settings</span></button>
-      {!props.collapsed && <div className="local-badge"><Sparkles size={15} /><div><strong>100% local</strong><span>Your prompts stay on this device</span></div></div>}
+      {!props.collapsed && <div className="local-badge"><Sparkles size={15} /><div><strong>Local-first</strong><span>You control every model route</span></div></div>}
       <button className="collapse-button" onClick={props.onToggle} aria-label={props.collapsed ? 'Expand sidebar' : 'Collapse sidebar'}>{props.collapsed ? <ChevronRight size={17} /> : <><ChevronLeft size={17} /><span>Collapse</span></>}</button>
     </div>
   </aside>
