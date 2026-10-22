@@ -30,6 +30,7 @@ plan remains in effect; milestones are not guaranteed calendar-day deadlines.
 
 ### 2026-10-22 scheduled run: Anthropic usage accounting
 
+- Implementation commit: `c05ea54`, pushed to `origin/codex/provider-reliability`.
 - Fixed streaming input counts being lost when cumulative output usage arrives.
 - Retained per-field cumulative usage across ping/stop events and repeated
   updates; included cache-read and cache-creation input tokens in both response
