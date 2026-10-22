@@ -3,6 +3,18 @@ import { getProviderKey } from './provider-vault.js'
 
 export interface ModelResult { content: string; tokens: number }
 
+interface AnthropicUsage {
+  input_tokens?: number
+  output_tokens?: number
+  cache_creation_input_tokens?: number
+  cache_read_input_tokens?: number
+}
+
+function anthropicTokenTotal(usage: AnthropicUsage) {
+  return (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0)
+    + (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0)
+}
+
 function cleanBaseUrl(raw: string, provider: ModelProvider) {
   const value = raw.trim().replace(/\/+$/, '')
   let url: URL
@@ -32,7 +44,8 @@ function allMessages(bot: Bot, messages: { role: string; content: string }[]) {
 export async function runProviderModel(provider: ModelProvider, bot: Bot, messages: { role: string; content: string }[], timeoutMs = 180_000, onChunk?: (content: string) => void, signal?: AbortSignal): Promise<ModelResult> {
   if (!provider.enabled) throw new Error(`${provider.name} is disabled.`)
   const headers = await providerHeaders(provider)
-  const requestSignal = signal ?? AbortSignal.timeout(timeoutMs)
+  const timeoutSignal = AbortSignal.timeout(timeoutMs)
+  const requestSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal
   if (provider.kind === 'ollama') return runOllama(provider, bot, messages, headers, requestSignal, onChunk)
   if (provider.kind === 'anthropic') return runAnthropic(provider, bot, messages, headers, requestSignal, onChunk)
   return runOpenAICompatible(provider, bot, messages, headers, requestSignal, onChunk)
@@ -78,16 +91,18 @@ async function runAnthropic(provider: ModelProvider, bot: Bot, messages: { role:
   const response = await fetchProvider(provider, '/messages', { method: 'POST', headers, signal, body: JSON.stringify(body) })
   if (!response.ok) throw new Error(await response.text() || `${provider.name} returned HTTP ${response.status}`)
   if (!onChunk) {
-    const data = await response.json() as { content?: { type: string; text?: string }[]; usage?: { input_tokens?: number; output_tokens?: number } }
-    return { content: data.content?.filter(item => item.type === 'text').map(item => item.text ?? '').join('').trim() ?? '', tokens: (data.usage?.input_tokens ?? 0) + (data.usage?.output_tokens ?? 0) }
+    const data = await response.json() as { content?: { type: string; text?: string }[]; usage?: AnthropicUsage }
+    return { content: data.content?.filter(item => item.type === 'text').map(item => item.text ?? '').join('').trim() ?? '', tokens: anthropicTokenTotal(data.usage ?? {}) }
   }
-  let content = ''; let tokens = 0
+  let content = ''; let usage: AnthropicUsage = {}
   await readSse(response, data => {
-    const packet = JSON.parse(data) as { type?: string; delta?: { type?: string; text?: string }; message?: { usage?: { input_tokens?: number } }; usage?: { output_tokens?: number } }
+    const packet = JSON.parse(data) as { type?: string; delta?: { type?: string; text?: string }; message?: { usage?: AnthropicUsage }; usage?: AnthropicUsage }
     const chunk = packet.type === 'content_block_delta' ? packet.delta?.text ?? '' : ''; if (chunk) { content += chunk; onChunk(chunk) }
-    tokens = (packet.message?.usage?.input_tokens ?? 0) + (packet.usage?.output_tokens ?? Math.max(0, tokens))
+    // Usage updates are cumulative per field, not increments or replacement totals.
+    if (packet.type === 'message_start') usage = { ...usage, ...packet.message?.usage }
+    if (packet.type === 'message_delta') usage = { ...usage, ...packet.usage }
   })
-  return { content: content.trim(), tokens }
+  return { content: content.trim(), tokens: anthropicTokenTotal(usage) }
 }
 
 async function readLines(response: Response, consume: (line: string) => void) {
