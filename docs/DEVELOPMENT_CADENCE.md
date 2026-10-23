@@ -30,6 +30,7 @@ plan remains in effect; milestones are not guaranteed calendar-day deadlines.
 
 ### 2026-10-23 scheduled run: Anthropic instruction preservation
 
+- Implementation commit: `49ed8a5`, pushed to `origin/codex/provider-reliability`.
 - On `codex/provider-reliability`, preserved request-wide system messages in
   Anthropic's top-level system field instead of silently filtering them away.
   This covers broker/worker/reviewer instructions, browser controls and ledger
