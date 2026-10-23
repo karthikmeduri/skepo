@@ -28,6 +28,24 @@ plan remains in effect; milestones are not guaranteed calendar-day deadlines.
 
 ## Milestone sequence
 
+### 2026-10-23 scheduled run: Anthropic instruction preservation
+
+- On `codex/provider-reliability`, preserved request-wide system messages in
+  Anthropic's top-level system field instead of silently filtering them away.
+  This covers broker/worker/reviewer instructions, browser controls and ledger
+  context. Existing user/assistant order and caller-owned arrays are preserved.
+- Three new fixture cases cover both response modes, multiple system messages,
+  whitespace-only instructions and preventing user text from becoming system text.
+- All 26 tests passed (Vitest reported 1.02 s); TypeScript check passed.
+- Vite production build passed in 7.20 s; diff whitespace validation passed.
+  These are build/test timings, not inference or machine-load benchmarks.
+- Compatibility choice: these are request-wide Skepo instructions, not a new
+  implementation of model-specific mid-conversation system-role semantics.
+- Remaining: base-prompt deduplication, streaming errors, usage semantics for
+  other providers, inference/resource benchmarks. Milestone 1 is not complete.
+- No paid calls, model downloads, installer rebuild or macOS validation.
+- Reference: https://platform.claude.com/docs/en/api/typescript/messages/create
+
 ### 2026-10-22 scheduled run: Anthropic usage accounting
 
 - Implementation commit: `c05ea54`, pushed to `origin/codex/provider-reliability`.

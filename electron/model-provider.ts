@@ -87,7 +87,11 @@ async function runOpenAICompatible(provider: ModelProvider, bot: Bot, messages: 
 }
 
 async function runAnthropic(provider: ModelProvider, bot: Bot, messages: { role: string; content: string }[], headers: Record<string,string>, signal: AbortSignal, onChunk?: (content: string) => void): Promise<ModelResult> {
-  const body = { model: bot.model, system: bot.systemPrompt.trim() || undefined, messages: messages.filter(message => message.role !== 'system'), max_tokens: Math.min(8192, Math.max(1024, Math.floor(bot.contextLength / 2))), temperature: bot.temperature, top_p: bot.topP, stream: !!onChunk }
+  // Use the broadly supported top-level field for Skepo's request-wide
+  // instructions. Never silently discard broker, browser or ledger context.
+  const system = allMessages(bot, messages).filter(message => message.role === 'system')
+    .map(message => message.content.trim()).filter(Boolean).join('\n\n')
+  const body = { model: bot.model, system: system || undefined, messages: messages.filter(message => message.role !== 'system'), max_tokens: Math.min(8192, Math.max(1024, Math.floor(bot.contextLength / 2))), temperature: bot.temperature, top_p: bot.topP, stream: !!onChunk }
   const response = await fetchProvider(provider, '/messages', { method: 'POST', headers, signal, body: JSON.stringify(body) })
   if (!response.ok) throw new Error(await response.text() || `${provider.name} returned HTTP ${response.status}`)
   if (!onChunk) {

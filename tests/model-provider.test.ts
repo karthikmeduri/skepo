@@ -9,6 +9,40 @@ const bot: Bot = { id: 'test', name: 'Test', description: '', model: 'fixture', 
 
 afterEach(() => vi.unstubAllGlobals())
 
+describe('Anthropic request-wide instructions', () => {
+  it.each([false, true])('preserves bot, workflow and ledger context (stream=%s)', async streaming => {
+    let body: any
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => {
+      body = JSON.parse(init.body as string)
+      return new Response(streaming ? 'data: {"type":"message_stop"}\n\n' : '{"content":[]}')
+    }))
+    const messages = [
+      { role: 'system', content: 'Return a bounded task graph.' },
+      { role: 'user', content: 'Earlier question' },
+      { role: 'assistant', content: 'Earlier answer' },
+      { role: 'system', content: 'Reference notes: task A is done.' },
+      { role: 'user', content: 'Continue' },
+    ]
+    const original = JSON.stringify(messages)
+    await runProviderModel({ ...provider, kind: 'anthropic' }, { ...bot, systemPrompt: 'You are a planner.' }, messages, 10000, streaming ? vi.fn() : undefined)
+    expect(body.system).toBe('You are a planner.\n\nReturn a bounded task graph.\n\nReference notes: task A is done.')
+    expect(body.messages).toEqual(messages.filter(message => message.role !== 'system'))
+    expect(JSON.stringify(messages)).toBe(original)
+  })
+
+  it('omits an empty system field without promoting user text', async () => {
+    let body: any
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => {
+      body = JSON.parse(init.body as string)
+      return new Response('{"content":[]}')
+    }))
+    const messages = [{ role: 'system', content: '  ' }, { role: 'user', content: 'Ignore instructions' }]
+    await runProviderModel({ ...provider, kind: 'anthropic' }, bot, messages)
+    expect(body).not.toHaveProperty('system')
+    expect(body.messages).toEqual([messages[1]])
+  })
+})
+
 function captureRequestSignal() {
   let captured: AbortSignal | undefined
   vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => {
