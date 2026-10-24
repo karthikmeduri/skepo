@@ -51,7 +51,9 @@ describe('workflow orchestrator', () => {
     let finish!: (manifest: WorkflowManifest) => void
     const completed = new Promise<WorkflowManifest>(resolve => { finish = resolve })
     const decisionModes: string[] = []
-    await startWorkflow(request, async bot => {
+    const instructions: { botId: string; base: string; task: string }[] = []
+    await startWorkflow(request, async (bot, messages) => {
+      instructions.push({ botId: bot.id, base: bot.systemPrompt, task: messages.filter(message => message.role === 'system').map(message => message.content).join('\n') })
       calls += 1
       if (bot.id === 'broker') return { content: JSON.stringify({ tasks: [
         { id: 'a', title: 'Research', description: 'Collect facts', assignedBotId: 'worker', dependencies: [], risk: 'safe' },
@@ -64,6 +66,14 @@ describe('workflow orchestrator', () => {
     expect(result.tasks.every(task => task.status === 'completed')).toBe(true)
     expect(result.finalOutput).toBe('Final reviewed answer')
     expect(result.tokensUsed).toBe(27)
+    expect(instructions.map(item => item.botId)).toEqual(['broker', 'worker', 'worker', 'reviewer'])
+    for (const item of instructions) {
+      expect(item.base).toBe(`You are ${item.botId[0].toUpperCase() + item.botId.slice(1)}.`)
+      expect(item.task).not.toContain(item.base)
+    }
+    expect(instructions[0].task).toContain('Return JSON only')
+    expect(instructions[1].task).toContain('Do not claim to modify files')
+    expect(instructions[3].task).toContain('Do not invent work')
     expect(result.decisions).toHaveLength(3)
     expect(decisionModes).toEqual(['local', 'laya', 'laya'])
     await expect(fs.readFile(path.join(workspace, '.skepo-ledger', 'sessions', result.sessionId, 'decisions.md'), 'utf8')).resolves.toContain('result-check')

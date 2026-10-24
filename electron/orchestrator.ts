@@ -6,6 +6,7 @@ import type { Bot, DecisionRecord, LedgerNote, WorkflowManifest, WorkflowStartRe
 import type { DecisionRequest } from './decision-engine'
 
 export type ModelResult = { content: string; tokens: number }
+// Runners add bot.systemPrompt once; messages contain only task-specific context.
 export type ModelRunner = (bot: Bot, messages: { role: string; content: string }[], ollamaUrl: string, timeoutMs?: number) => Promise<ModelResult>
 export type WorkflowEmitter = (manifest: WorkflowManifest) => void
 export type NoteFinder = (workspace: string, query: string, botId: string, limit: number) => Promise<LedgerNote[]>
@@ -144,7 +145,7 @@ export async function startWorkflow(request: WorkflowStartRequest, runModel: Mod
     const broker = botById(request, request.orchestratorBotId)
     const workers = request.workerBotIds.map(id => botById(request, id)).map(bot => ({ id: bot.id, name: bot.name, description: bot.description }))
     const planning = await runModel(broker, [
-      { role: 'system', content: `${broker.systemPrompt}\n\nYou are the workflow broker. Return JSON only. Decompose the goal into a small dependency graph. Assign each task to an available bot ID. Mark risk as "review" if a task could change external state, delete/overwrite data, publish, spend money, or needs a human decision; otherwise "safe".` },
+      { role: 'system', content: `You are the workflow broker. Return JSON only. Decompose the goal into a small dependency graph. Assign each task to an available bot ID. Mark risk as "review" if a task could change external state, delete/overwrite data, publish, spend money, or needs a human decision; otherwise "safe".` },
       { role: 'user', content: `Goal: ${request.goal}\nAvailable workers: ${JSON.stringify(workers)}\nReturn {"tasks":[{"id":"1","title":"...","description":"specific deliverable","assignedBotId":"...","dependencies":[],"risk":"safe|review"}]}. Maximum ${request.budget.maxTasks} tasks. Dependencies may reference only earlier task IDs.` },
     ], request.ollamaUrl, 180_000)
     manifest.tokensUsed += planning.tokens
@@ -183,7 +184,7 @@ async function executeTask(request: WorkflowStartRequest, manifest: WorkflowMani
     const dependencyResults = task.dependencies.map(id => manifest.tasks.find(item => item.id === id)).filter((item): item is WorkflowTask => !!item).map(item => `${item.title}: ${item.result}`).join('\n\n')
     const notes = await findNotes(request.workspacePath, `${manifest.goal} ${task.title} ${task.description}`, worker.id, 3)
     const result = await runModel(worker, [
-      { role: 'system', content: `${worker.systemPrompt}\n\nYou are a worker in a bounded local workflow. Complete only your assigned task. Return a concise deliverable with assumptions, evidence, decisions, and next-step information. Do not claim to modify files or external systems.` },
+      { role: 'system', content: `You are a worker in a bounded local workflow. Complete only your assigned task. Return a concise deliverable with assumptions, evidence, decisions, and next-step information. Do not claim to modify files or external systems.` },
       { role: 'user', content: `Global goal: ${manifest.goal}\n\nAssigned task: ${task.title}\n${task.description}${dependencyResults ? `\n\nCompleted dependencies:\n${dependencyResults}` : ''}${contextFrom(notes)}` },
     ], request.ollamaUrl, Math.max(60_000, request.budget.timeoutMinutes * 60_000))
     task.result = result.content; task.tokenCount += result.tokens; manifest.tokensUsed += result.tokens; task.lease = undefined
@@ -233,7 +234,7 @@ export async function runWorkflow(request: WorkflowStartRequest, manifest: Workf
     const reviewer = botById(request, request.reviewerBotId)
     const outputs = manifest.tasks.map(task => `## ${task.title}\n${task.result ?? 'No result'}`).join('\n\n')
     const review = await runModel(reviewer, [
-      { role: 'system', content: `${reviewer.systemPrompt}\n\nYou are the final reviewer. Reconcile the worker outputs, call out conflicts or uncertainty, and produce one coherent result for the user's goal. Do not invent work that was not completed.` },
+      { role: 'system', content: `You are the final reviewer. Reconcile the worker outputs, call out conflicts or uncertainty, and produce one coherent result for the user's goal. Do not invent work that was not completed.` },
       { role: 'user', content: `Goal: ${manifest.goal}\n\nWorker outputs:\n${outputs}` },
     ], request.ollamaUrl, 180_000)
     manifest.tokensUsed += review.tokens; manifest.finalOutput = review.content; manifest.status = 'completed'; manifest.completedAt = Date.now()

@@ -9,6 +9,18 @@ const bot: Bot = { id: 'test', name: 'Test', description: '', model: 'fixture', 
 
 afterEach(() => vi.unstubAllGlobals())
 
+it('adds the bot persona once alongside task instructions for Ollama', async () => {
+  let body: any
+  vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => {
+    body = JSON.parse(init.body as string)
+    return new Response('{"message":{"content":"ok"}}')
+  }))
+  const messages = [{ role: 'system', content: 'Complete only the assigned task.' }, { role: 'user', content: 'Summarize' }]
+  await runProviderModel(provider, { ...bot, systemPrompt: 'You are a researcher.' }, messages)
+  expect(body.messages).toEqual([{ role: 'system', content: 'You are a researcher.' }, ...messages])
+  expect(messages).toHaveLength(2)
+})
+
 describe('Anthropic request-wide instructions', () => {
   it.each([false, true])('preserves bot, workflow and ledger context (stream=%s)', async streaming => {
     let body: any

@@ -28,6 +28,23 @@ plan remains in effect; milestones are not guaranteed calendar-day deadlines.
 
 ## Milestone sequence
 
+### 2026-10-24 scheduled run: workflow persona deduplication
+
+- Removed duplicate base personas from broker, worker and reviewer messages.
+  The provider runner still inserts each bot's base prompt; task-specific
+  instructions and safety boundaries remain unchanged. No heuristic substring
+  removal is applied to arbitrary user or ledger text.
+- Extended the full workflow fixture to check all four model calls retain the
+  base persona separately and preserve broker/worker/reviewer instructions.
+  Added an Ollama request-composition fixture; existing Anthropic composition
+  fixtures remain green.
+- All 27 tests passed (670 ms reported by Vitest); TypeScript check and Vite
+  production build passed (6.84 s); diff whitespace validation passed.
+- No inference benchmark, token savings percentage, or RAM improvement is
+  claimed. No paid calls, model downloads, installer or macOS build performed.
+- Milestone 1 still needs streaming-error handling, remaining provider usage
+  semantics, cancellation coverage and inference/resource baselines.
+
 ### 2026-10-23 scheduled run: Anthropic instruction preservation
 
 - Implementation commit: `49ed8a5`, pushed to `origin/codex/provider-reliability`.
