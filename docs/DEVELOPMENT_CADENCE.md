@@ -30,6 +30,7 @@ plan remains in effect; milestones are not guaranteed calendar-day deadlines.
 
 ### 2026-10-24 scheduled run: workflow persona deduplication
 
+- Implementation commit: `650697c`, pushed to `origin/codex/provider-reliability`.
 - Removed duplicate base personas from broker, worker and reviewer messages.
   The provider runner still inserts each bot's base prompt; task-specific
   instructions and safety boundaries remain unchanged. No heuristic substring
