@@ -9,6 +9,64 @@ const bot: Bot = { id: 'test', name: 'Test', description: '', model: 'fixture', 
 
 afterEach(() => vi.unstubAllGlobals())
 
+describe('provider stream cleanup', () => {
+  function fixture(text: string, close = false, failCancel = false) {
+    const cancel = vi.fn(() => { if (failCancel) throw new Error('cleanup failed') })
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) { controller.enqueue(new TextEncoder().encode(text)); if (close) controller.close() },
+      cancel,
+    })
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(body)))
+    return { body, cancel }
+  }
+
+  it('cancels and unlocks the stream on malformed packets', async () => {
+    const { body, cancel } = fixture('not json\n')
+    await expect(runProviderModel(provider, bot, [], 10000, vi.fn())).rejects.toBeInstanceOf(SyntaxError)
+    expect(cancel).toHaveBeenCalledTimes(1)
+    expect(body.locked).toBe(false)
+  })
+
+  it('preserves consumer errors even if cancellation fails', async () => {
+    const { body, cancel } = fixture('{"message":{"content":"hello"}}\n', false, true)
+    await expect(runProviderModel(provider, bot, [], 10000, () => { throw new Error('consumer failed') })).rejects.toThrow('consumer failed')
+    expect(cancel).toHaveBeenCalledTimes(1)
+    expect(body.locked).toBe(false)
+  })
+
+  it('unlocks completed streams and reads a final packet without a newline', async () => {
+    const { body, cancel } = fixture('{"message":{"content":"hello"},"eval_count":2}', true)
+    expect(await runProviderModel(provider, bot, [], 10000, vi.fn())).toEqual({ content: 'hello', tokens: 2 })
+    expect(cancel).not.toHaveBeenCalled()
+    expect(body.locked).toBe(false)
+  })
+
+  it('decodes multibyte text split across transport chunks', async () => {
+    const bytes = new TextEncoder().encode('{"message":{"content":"🌻"}}\n')
+    const split = bytes.indexOf(0xf0) + 2
+    const body = new ReadableStream<Uint8Array>({ start(controller) {
+      controller.enqueue(bytes.slice(0, split)); controller.enqueue(bytes.slice(split)); controller.close()
+    } })
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(body)))
+    expect((await runProviderModel(provider, bot, [], 10000, vi.fn())).content).toBe('🌻')
+    expect(body.locked).toBe(false)
+  })
+
+  it('releases the reader when the transport itself fails', async () => {
+    const body = new ReadableStream<Uint8Array>({ start(controller) { controller.error(new Error('connection lost')) } })
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(body)))
+    await expect(runProviderModel(provider, bot, [], 10000, vi.fn())).rejects.toThrow('connection lost')
+    expect(body.locked).toBe(false)
+  })
+
+  it('also cancels malformed SSE streams used by Claude', async () => {
+    const { body, cancel } = fixture('data: not json\n\n')
+    await expect(runProviderModel({ ...provider, kind: 'anthropic' }, bot, [], 10000, vi.fn())).rejects.toBeInstanceOf(SyntaxError)
+    expect(cancel).toHaveBeenCalledTimes(1)
+    expect(body.locked).toBe(false)
+  })
+})
+
 it('adds the bot persona once alongside task instructions for Ollama', async () => {
   let body: any
   vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => {

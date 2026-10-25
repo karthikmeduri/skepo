@@ -28,6 +28,22 @@ plan remains in effect; milestones are not guaranteed calendar-day deadlines.
 
 ## Milestone sequence
 
+### 2026-10-25 scheduled run: streaming transport cleanup
+
+- Shared provider stream reader now cancels unfinished bodies after parser or
+  consumer failures and always releases its reader lock. Cancellation failures
+  do not replace the original exception. Flushes the decoder at end of stream.
+- Six fixture cases cover malformed NDJSON and SSE, consumer failure with
+  failing cleanup, transport failure, final packets without a newline, and
+  multibyte UTF-8 characters split across chunks.
+- All 33 tests passed (651 ms reported by Vitest); TypeScript check and Vite
+  production build passed (7.14 s), plus diff whitespace validation.
+- These timings are development checks, not inference/resource benchmarks.
+  No claim that cancelling a response guarantees remote billing stops.
+- Milestone 1 remains incomplete: provider error envelopes, truncated-stream
+  detection, remaining usage semantics, cancellation and inference baselines.
+- No paid API calls, downloads, new installer or macOS validation.
+
 ### 2026-10-24 scheduled run: workflow persona deduplication
 
 - Implementation commit: `650697c`, pushed to `origin/codex/provider-reliability`.

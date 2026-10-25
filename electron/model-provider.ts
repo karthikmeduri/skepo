@@ -112,8 +112,23 @@ async function runAnthropic(provider: ModelProvider, bot: Bot, messages: { role:
 async function readLines(response: Response, consume: (line: string) => void) {
   if (!response.body) throw new Error('Provider returned an empty stream.')
   const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffer = ''
-  while (true) { const { done, value } = await reader.read(); if (done) break; buffer += decoder.decode(value, { stream: true }); const lines = buffer.split('\n'); buffer = lines.pop() ?? ''; for (const line of lines) if (line.trim()) consume(line) }
-  if (buffer.trim()) consume(buffer)
+  let completed = false
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) { completed = true; break }
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n'); buffer = lines.pop() ?? ''
+      for (const line of lines) if (line.trim()) consume(line)
+    }
+    buffer += decoder.decode()
+    if (buffer.trim()) consume(buffer)
+  } finally {
+    // Parsing or consumer failures must not leave a generation stream running.
+    // Cleanup errors must not mask the original failure.
+    try { if (!completed) await reader.cancel() } catch { /* best-effort cleanup */ }
+    reader.releaseLock()
+  }
 }
 
 async function readSse(response: Response, consume: (data: string) => void) {
