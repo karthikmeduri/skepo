@@ -30,6 +30,7 @@ plan remains in effect; milestones are not guaranteed calendar-day deadlines.
 
 ### 2026-10-25 scheduled run: streaming transport cleanup
 
+- Implementation commit: `4fd1905`, pushed to `origin/codex/provider-reliability`.
 - Shared provider stream reader now cancels unfinished bodies after parser or
   consumer failures and always releases its reader lock. Cancellation failures
   do not replace the original exception. Flushes the decoder at end of stream.
