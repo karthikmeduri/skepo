@@ -30,6 +30,7 @@ plan remains in effect; milestones are not guaranteed calendar-day deadlines.
 
 ### 2026-10-26 scheduled run: Claude error envelopes
 
+- Implementation commit: `6194364`, pushed to `origin/codex/provider-reliability`.
 - Claude error envelopes now reject both streaming and non-streaming requests,
   including errors delivered with HTTP 200, instead of returning successful
   empty or partial results. Already emitted partial text cannot be withdrawn;
