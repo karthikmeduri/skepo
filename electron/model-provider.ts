@@ -95,12 +95,14 @@ async function runAnthropic(provider: ModelProvider, bot: Bot, messages: { role:
   const response = await fetchProvider(provider, '/messages', { method: 'POST', headers, signal, body: JSON.stringify(body) })
   if (!response.ok) throw new Error(await response.text() || `${provider.name} returned HTTP ${response.status}`)
   if (!onChunk) {
-    const data = await response.json() as { content?: { type: string; text?: string }[]; usage?: AnthropicUsage }
+    const data = await response.json() as { type?: string; error?: unknown; content?: { type: string; text?: string }[]; usage?: AnthropicUsage }
+    if (data.type === 'error' || data.error != null) throw new Error(`${provider.name} returned an error response; generation did not complete.`)
     return { content: data.content?.filter(item => item.type === 'text').map(item => item.text ?? '').join('').trim() ?? '', tokens: anthropicTokenTotal(data.usage ?? {}) }
   }
   let content = ''; let usage: AnthropicUsage = {}
   await readSse(response, data => {
-    const packet = JSON.parse(data) as { type?: string; delta?: { type?: string; text?: string }; message?: { usage?: AnthropicUsage }; usage?: AnthropicUsage }
+    const packet = JSON.parse(data) as { type?: string; error?: unknown; delta?: { type?: string; text?: string }; message?: { usage?: AnthropicUsage }; usage?: AnthropicUsage }
+    if (packet.type === 'error' || packet.error != null) throw new Error(`${provider.name} returned a stream error; generation did not complete.`)
     const chunk = packet.type === 'content_block_delta' ? packet.delta?.text ?? '' : ''; if (chunk) { content += chunk; onChunk(chunk) }
     // Usage updates are cumulative per field, not increments or replacement totals.
     if (packet.type === 'message_start') usage = { ...usage, ...packet.message?.usage }

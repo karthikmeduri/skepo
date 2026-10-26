@@ -9,6 +9,43 @@ const bot: Bot = { id: 'test', name: 'Test', description: '', model: 'fixture', 
 
 afterEach(() => vi.unstubAllGlobals())
 
+describe('Claude provider error envelopes', () => {
+  const claude: ModelProvider = { ...provider, kind: 'anthropic', name: 'Claude' }
+
+  it.each([true, false])('rejects error envelopes even on HTTP 200 (stream=%s)', async streaming => {
+    const packet = { type: 'error', error: { type: 'overloaded_error', message: 'private prompt echoed by upstream' } }
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(streaming ? `data: ${JSON.stringify(packet)}\n\n` : JSON.stringify(packet))))
+    let error: unknown
+    try { await runProviderModel(claude, bot, [], 10000, streaming ? vi.fn() : undefined) } catch (caught) { error = caught }
+    expect(error).toBeInstanceOf(Error)
+    expect((error as Error).message).toContain('generation did not complete')
+    expect((error as Error).message).not.toContain('private prompt')
+  })
+
+  it('rejects partial output and cancels the stream after an error event', async () => {
+    const cancel = vi.fn()
+    const body = new ReadableStream<Uint8Array>({ start(controller) {
+      controller.enqueue(new TextEncoder().encode([
+        { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Partial' } },
+        { type: 'error', error: { type: 'overloaded_error', message: 'Overloaded' } },
+        { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Should not arrive' } },
+      ].map(packet => `data: ${JSON.stringify(packet)}\n\n`).join('')))
+    }, cancel })
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(body)))
+    const chunk = vi.fn()
+    await expect(runProviderModel(claude, bot, [], 10000, chunk)).rejects.toThrow('stream error')
+    expect(chunk).toHaveBeenCalledTimes(1)
+    expect(chunk).toHaveBeenCalledWith('Partial')
+    expect(cancel).toHaveBeenCalledTimes(1)
+    expect(body.locked).toBe(false)
+  })
+
+  it('rejects an error event even if its details are missing', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('data: {"type":"error"}\n\n')))
+    await expect(runProviderModel(claude, bot, [], 10000, vi.fn())).rejects.toThrow('stream error')
+  })
+})
+
 describe('provider stream cleanup', () => {
   function fixture(text: string, close = false, failCancel = false) {
     const cancel = vi.fn(() => { if (failCancel) throw new Error('cleanup failed') })

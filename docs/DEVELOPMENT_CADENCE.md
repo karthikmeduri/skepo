@@ -28,6 +28,25 @@ plan remains in effect; milestones are not guaranteed calendar-day deadlines.
 
 ## Milestone sequence
 
+### 2026-10-26 scheduled run: Claude error envelopes
+
+- Claude error envelopes now reject both streaming and non-streaming requests,
+  including errors delivered with HTTP 200, instead of returning successful
+  empty or partial results. Already emitted partial text cannot be withdrawn;
+  subsequent chunks are not emitted and unfinished readers are cancelled.
+- These envelope errors use a fixed message rather than echoing upstream error
+  payloads that could contain private prompt text. This is not a claim that all
+  provider error paths sanitize their messages.
+- Four new fixture cases cover both response modes, errors after partial output
+  with reader cleanup, and error envelopes without details.
+- All 37 tests passed (Vitest duration 1.01 s); TypeScript check, Vite production
+  build (6.99 s), and diff whitespace validation passed.
+- These are development-check timings, not inference or memory benchmarks.
+  No paid API calls, model downloads, new installer or macOS validation.
+- Milestone 1 remains incomplete: truncated-stream detection, remaining provider
+  error/usage semantics, broader cancellation and inference/resource baselines.
+- Reference: https://platform.claude.com/docs/en/build-with-claude/streaming
+
 ### 2026-10-25 scheduled run: streaming transport cleanup
 
 - Implementation commit: `4fd1905`, pushed to `origin/codex/provider-reliability`.
