@@ -9,6 +9,33 @@ const bot: Bot = { id: 'test', name: 'Test', description: '', model: 'fixture', 
 
 afterEach(() => vi.unstubAllGlobals())
 
+describe('Ollama stream completion', () => {
+  it.each(['', '{"message":{"content":"partial"}}\n', '{"done":false}\n', '{"done":"true"}\n'])('rejects EOF without a boolean completion marker (%s)', async text => {
+    const response = new Response(text)
+    vi.stubGlobal('fetch', vi.fn(async () => response))
+    await expect(runProviderModel(provider, bot, [], 10000, vi.fn())).rejects.toThrow('stream ended before completion')
+    expect(response.body?.locked).toBe(false)
+  })
+
+  it('retains partial callbacks but does not return a successful partial result', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{"message":{"content":"partial"},"done":false}\n')))
+    const chunk = vi.fn()
+    await expect(runProviderModel(provider, bot, [], 10000, chunk)).rejects.toThrow('output may be incomplete')
+    expect(chunk).toHaveBeenCalledTimes(1)
+    expect(chunk).toHaveBeenCalledWith('partial')
+  })
+
+  it('accepts a terminal packet without text and keeps final usage', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{"message":{"content":"hello"},"done":false}\n{"done":true,"prompt_eval_count":3,"eval_count":2}\n')))
+    expect(await runProviderModel(provider, bot, [], 10000, vi.fn())).toEqual({ content: 'hello', tokens: 5 })
+  })
+
+  it('allows a completed empty response', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{"done":true}\n')))
+    expect(await runProviderModel(provider, bot, [], 10000, vi.fn())).toEqual({ content: '', tokens: 0 })
+  })
+})
+
 describe('Claude provider error envelopes', () => {
   const claude: ModelProvider = { ...provider, kind: 'anthropic', name: 'Claude' }
 
@@ -72,14 +99,14 @@ describe('provider stream cleanup', () => {
   })
 
   it('unlocks completed streams and reads a final packet without a newline', async () => {
-    const { body, cancel } = fixture('{"message":{"content":"hello"},"eval_count":2}', true)
+    const { body, cancel } = fixture('{"message":{"content":"hello"},"eval_count":2,"done":true}', true)
     expect(await runProviderModel(provider, bot, [], 10000, vi.fn())).toEqual({ content: 'hello', tokens: 2 })
     expect(cancel).not.toHaveBeenCalled()
     expect(body.locked).toBe(false)
   })
 
   it('decodes multibyte text split across transport chunks', async () => {
-    const bytes = new TextEncoder().encode('{"message":{"content":"🌻"}}\n')
+    const bytes = new TextEncoder().encode('{"message":{"content":"🌻"},"done":true}\n')
     const split = bytes.indexOf(0xf0) + 2
     const body = new ReadableStream<Uint8Array>({ start(controller) {
       controller.enqueue(bytes.slice(0, split)); controller.enqueue(bytes.slice(split)); controller.close()

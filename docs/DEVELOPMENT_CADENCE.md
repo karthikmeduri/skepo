@@ -28,6 +28,25 @@ plan remains in effect; milestones are not guaranteed calendar-day deadlines.
 
 ## Milestone sequence
 
+### 2026-10-27 scheduled run: Ollama truncated-stream detection
+
+- Ollama streaming results now require a boolean `done: true` packet before
+  transport EOF can count as success. Missing, false and string-valued markers
+  reject with an incomplete-output error; previously delivered text remains
+  visible through callbacks but is not returned as a successful ModelResult.
+- Seven fixtures cover empty/truncated streams, strict marker validation,
+  partial callbacks, terminal usage and valid empty completion. Updated two
+  existing transport fixtures to include valid terminal markers.
+- All 44 tests passed (714 ms Vitest duration). Initial run exposed an assertion
+  unavailable in installed Vitest; replaced it with supported assertions.
+  TypeScript check, Vite production build (7.10 s), and whitespace checks passed.
+- No inference/resource benchmark, paid API call, model download, installer,
+  GUI acceptance or macOS validation was performed. No UI code changed.
+- Milestone 1 remains incomplete: Claude and compatible-provider truncation,
+  remaining error/usage semantics, cancellation and inference/resource baselines.
+  This check confirms protocol completion, not answer quality or completeness.
+- Reference: https://docs.ollama.com/api/chat
+
 ### 2026-10-26 scheduled run: Claude error envelopes
 
 - Implementation commit: `6194364`, pushed to `origin/codex/provider-reliability`.
