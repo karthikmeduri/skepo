@@ -30,6 +30,7 @@ plan remains in effect; milestones are not guaranteed calendar-day deadlines.
 
 ### 2026-10-27 scheduled run: Ollama truncated-stream detection
 
+- Implementation commit: `fab04ca`, pushed to `origin/codex/provider-reliability`.
 - Ollama streaming results now require a boolean `done: true` packet before
   transport EOF can count as success. Missing, false and string-valued markers
   reject with an incomplete-output error; previously delivered text remains
