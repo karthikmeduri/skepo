@@ -30,6 +30,7 @@ plan remains in effect; milestones are not guaranteed calendar-day deadlines.
 
 ### 2026-10-28 scheduled run: Claude truncated-stream detection
 
+- Implementation commit: `46ea49f`, pushed to `origin/codex/provider-reliability`.
 - Claude streaming results now require `message_stop` before transport EOF
   counts as success. A content-block stop, ping or stop reason alone cannot
   mark the full message complete. Already emitted partial text remains visible,
