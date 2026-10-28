@@ -101,7 +101,7 @@ async function runAnthropic(provider: ModelProvider, bot: Bot, messages: { role:
     if (data.type === 'error' || data.error != null) throw new Error(`${provider.name} returned an error response; generation did not complete.`)
     return { content: data.content?.filter(item => item.type === 'text').map(item => item.text ?? '').join('').trim() ?? '', tokens: anthropicTokenTotal(data.usage ?? {}) }
   }
-  let content = ''; let usage: AnthropicUsage = {}
+  let content = ''; let usage: AnthropicUsage = {}; let completed = false
   await readSse(response, data => {
     const packet = JSON.parse(data) as { type?: string; error?: unknown; delta?: { type?: string; text?: string }; message?: { usage?: AnthropicUsage }; usage?: AnthropicUsage }
     if (packet.type === 'error' || packet.error != null) throw new Error(`${provider.name} returned a stream error; generation did not complete.`)
@@ -109,7 +109,9 @@ async function runAnthropic(provider: ModelProvider, bot: Bot, messages: { role:
     // Usage updates are cumulative per field, not increments or replacement totals.
     if (packet.type === 'message_start') usage = { ...usage, ...packet.message?.usage }
     if (packet.type === 'message_delta') usage = { ...usage, ...packet.usage }
+    if (packet.type === 'message_stop') completed = true
   })
+  if (!completed) throw new Error(`${provider.name} stream ended before completion; output may be incomplete.`)
   return { content: content.trim(), tokens: anthropicTokenTotal(usage) }
 }
 

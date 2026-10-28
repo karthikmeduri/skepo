@@ -36,6 +36,30 @@ describe('Ollama stream completion', () => {
   })
 })
 
+describe('Claude stream completion', () => {
+  const claude: ModelProvider = { ...provider, kind: 'anthropic', name: 'Claude' }
+
+  it.each(['', 'data: {"type":"ping"}\n\n', 'data: {"type":"content_block_stop"}\n\n', 'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"}}\n\n'])('rejects EOF without message_stop (%s)', async text => {
+    const response = new Response(text)
+    vi.stubGlobal('fetch', vi.fn(async () => response))
+    await expect(runProviderModel(claude, bot, [], 10000, vi.fn())).rejects.toThrow('stream ended before completion')
+    expect(response.body?.locked).toBe(false)
+  })
+
+  it('does not return a successful result after partial text', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('data: {"type":"content_block_delta","delta":{"text":"partial"}}\n\n')))
+    const chunk = vi.fn()
+    await expect(runProviderModel(claude, bot, [], 10000, chunk)).rejects.toThrow('output may be incomplete')
+    expect(chunk).toHaveBeenCalledTimes(1)
+    expect(chunk).toHaveBeenCalledWith('partial')
+  })
+
+  it('accepts a final message_stop without trailing newline', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('data: {"type":"message_start","message":{"usage":{"input_tokens":2}}}\n\ndata: {"type":"message_delta","usage":{"output_tokens":3}}\n\ndata: {"type":"message_stop"}')))
+    expect(await runProviderModel(claude, bot, [], 10000, vi.fn())).toEqual({ content: '', tokens: 5 })
+  })
+})
+
 describe('Claude provider error envelopes', () => {
   const claude: ModelProvider = { ...provider, kind: 'anthropic', name: 'Claude' }
 

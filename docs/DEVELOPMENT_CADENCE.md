@@ -28,6 +28,25 @@ plan remains in effect; milestones are not guaranteed calendar-day deadlines.
 
 ## Milestone sequence
 
+### 2026-10-28 scheduled run: Claude truncated-stream detection
+
+- Claude streaming results now require `message_stop` before transport EOF
+  counts as success. A content-block stop, ping or stop reason alone cannot
+  mark the full message complete. Already emitted partial text remains visible,
+  but truncated streams reject instead of returning successful ModelResults.
+- Six mocked fixtures cover missing terminal events, partial text and reader
+  unlock, and terminal usage with no trailing newline. Existing error-envelope
+  and token-accounting regressions remain green.
+- All 50 tests passed (985 ms Vitest duration); TypeScript, frontend production
+  build and diff whitespace checks passed. These are development checks, not
+  inference or resource benchmarks. No UI code changed or GUI test performed.
+- No paid calls, model downloads, installer rebuild or macOS validation.
+- Milestone 1 is still incomplete: compatible-provider truncation/error/usage
+  semantics, broader cancellation tests and inference/resource baselines.
+  Terminal-event detection does not certify answer quality or a complete SSE
+  event-order validator. Non-streaming behavior is unchanged.
+- Reference: https://platform.claude.com/docs/en/build-with-claude/streaming
+
 ### 2026-10-27 scheduled run: Ollama truncated-stream detection
 
 - Implementation commit: `fab04ca`, pushed to `origin/codex/provider-reliability`.
