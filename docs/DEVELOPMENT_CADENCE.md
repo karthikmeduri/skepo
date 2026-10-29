@@ -30,6 +30,7 @@ plan remains in effect; milestones are not guaranteed calendar-day deadlines.
 
 ### 2026-10-29 scheduled run: Ollama independent usage counters
 
+- Implementation commit: `68f1671`, pushed to `origin/codex/provider-reliability`.
 - Fixed streaming token totals losing prompt counts when only output counts
   arrive, or double-counting prompt tokens when only prompt counts repeat.
   Input and output counts now retain separate cumulative values. Explicit zero
