@@ -28,6 +28,22 @@ plan remains in effect; milestones are not guaranteed calendar-day deadlines.
 
 ## Milestone sequence
 
+### 2026-10-29 scheduled run: Ollama independent usage counters
+
+- Fixed streaming token totals losing prompt counts when only output counts
+  arrive, or double-counting prompt tokens when only prompt counts repeat.
+  Input and output counts now retain separate cumulative values. Explicit zero
+  replaces an earlier value; omitted fields preserve their respective counter.
+- Four mocked regression cases cover split updates, repeated input updates,
+  packets without usage, repeated output counts and explicit zero values.
+- All 54 tests passed (1.02 s Vitest duration), plus TypeScript, frontend
+  production build and diff whitespace validation. No UI changes or GUI tests.
+- This fixes accounting, not actual inference cost/speed. No resource or live
+  inference benchmark, paid call, model download, installer or macOS validation.
+- Milestone 1 remains incomplete: compatible-provider truncation/error/usage
+  handling, broader cancellation tests and reproducible performance baselines.
+  Invalid numeric usage and unknown-versus-zero accounting remain limitations.
+
 ### 2026-10-28 scheduled run: Claude truncated-stream detection
 
 - Implementation commit: `46ea49f`, pushed to `origin/codex/provider-reliability`.

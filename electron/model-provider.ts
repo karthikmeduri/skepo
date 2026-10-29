@@ -59,16 +59,19 @@ async function runOllama(provider: ModelProvider, bot: Bot, messages: { role: st
     if (data.error) throw new Error(data.error)
     return { content: data.message?.content?.trim() ?? '', tokens: (data.prompt_eval_count ?? 0) + (data.eval_count ?? 0) }
   }
-  let content = ''; let tokens = 0; let completed = false
+  let content = ''; let inputTokens = 0; let outputTokens = 0; let completed = false
   await readLines(response, line => {
     const packet = JSON.parse(line) as { done?: boolean; message?: { content?: string }; error?: string; prompt_eval_count?: number; eval_count?: number }
     if (packet.error) throw new Error(packet.error)
     const chunk = packet.message?.content ?? ''; if (chunk) { content += chunk; onChunk(chunk) }
-    tokens = (packet.prompt_eval_count ?? 0) + (packet.eval_count ?? tokens)
+    // Each count is cumulative and independent; omitted fields retain their
+    // last value, never the combined total from an earlier packet.
+    inputTokens = packet.prompt_eval_count ?? inputTokens
+    outputTokens = packet.eval_count ?? outputTokens
     if (packet.done === true) completed = true
   })
   if (!completed) throw new Error(`${provider.name} stream ended before completion; output may be incomplete.`)
-  return { content: content.trim(), tokens }
+  return { content: content.trim(), tokens: inputTokens + outputTokens }
 }
 
 async function runOpenAICompatible(provider: ModelProvider, bot: Bot, messages: { role: string; content: string }[], headers: Record<string,string>, signal: AbortSignal, onChunk?: (content: string) => void): Promise<ModelResult> {

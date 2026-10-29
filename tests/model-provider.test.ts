@@ -9,6 +9,22 @@ const bot: Bot = { id: 'test', name: 'Test', description: '', model: 'fixture', 
 
 afterEach(() => vi.unstubAllGlobals())
 
+describe('Ollama cumulative usage', () => {
+  it.each([
+    [{ prompt_eval_count: 10 }, { eval_count: 2 }, { eval_count: 5 }],
+    [{ prompt_eval_count: 10, eval_count: 5 }, { prompt_eval_count: 10 }, { prompt_eval_count: 10 }],
+    [{ prompt_eval_count: 10, eval_count: 5 }, {}, { eval_count: 5 }],
+  ])('retains independent counters across partial usage updates: %j', async (...packets) => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response([...packets, { done: true }].map(packet => JSON.stringify(packet)).join('\n'))))
+    expect((await runProviderModel(provider, bot, [], 10000, vi.fn())).tokens).toBe(15)
+  })
+
+  it('replaces previous counts with explicit zero values', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{"prompt_eval_count":10,"eval_count":5}\n{"prompt_eval_count":0,"eval_count":0,"done":true}\n')))
+    expect((await runProviderModel(provider, bot, [], 10000, vi.fn())).tokens).toBe(0)
+  })
+})
+
 describe('Ollama stream completion', () => {
   it.each(['', '{"message":{"content":"partial"}}\n', '{"done":false}\n', '{"done":"true"}\n'])('rejects EOF without a boolean completion marker (%s)', async text => {
     const response = new Response(text)
