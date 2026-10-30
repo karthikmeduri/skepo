@@ -30,6 +30,7 @@ plan remains in effect; milestones are not guaranteed calendar-day deadlines.
 
 ### 2026-10-30 scheduled run: compatible-API stream completion and errors
 
+- Implementation commit: `36bd00a`, pushed to `origin/codex/provider-reliability`.
 - Compatible Chat Completions streams now require `[DONE]` before EOF and
   reject non-null error envelopes in both response modes, including HTTP 200.
   Envelope failures use fixed messages instead of echoing upstream payloads.
