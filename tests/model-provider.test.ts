@@ -9,6 +9,43 @@ const bot: Bot = { id: 'test', name: 'Test', description: '', model: 'fixture', 
 
 afterEach(() => vi.unstubAllGlobals())
 
+describe('compatible API completion and errors', () => {
+  const compatible: ModelProvider = { ...provider, kind: 'openai-compatible', name: 'Compatible' }
+
+  it.each(['', 'data: {"choices":[{"delta":{"content":"partial"}}]}\n\n', 'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n'])('rejects EOF without DONE (%s)', async text => {
+    const response = new Response(text)
+    vi.stubGlobal('fetch', vi.fn(async () => response))
+    await expect(runProviderModel(compatible, bot, [], 10000, vi.fn())).rejects.toThrow('stream ended before completion')
+    expect(response.body?.locked).toBe(false)
+  })
+
+  it.each([true, false])('rejects HTTP 200 error envelopes without echoing private details (stream=%s)', async streaming => {
+    const packet = JSON.stringify({ error: { message: 'private prompt' } })
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(streaming ? `data: ${packet}\n\ndata: [DONE]\n\n` : packet)))
+    await expect(runProviderModel(compatible, bot, [], 10000, streaming ? vi.fn() : undefined)).rejects.toThrow(streaming ? 'Compatible returned a stream error; generation did not complete.' : 'Compatible returned an error response; generation did not complete.')
+  })
+
+  it('preserves text and trailing usage before a DONE marker without newline', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('data: {"choices":[{"delta":{"content":"hello"}}]}\n\ndata: {"choices":[],"usage":{"total_tokens":12}}\n\ndata: [DONE]')))
+    const chunk = vi.fn()
+    expect(await runProviderModel(compatible, bot, [], 10000, chunk)).toEqual({ content: 'hello', tokens: 12 })
+    expect(chunk).toHaveBeenCalledWith('hello')
+  })
+
+  it('cancels and unlocks an error stream after partial output', async () => {
+    const cancel = vi.fn()
+    const body = new ReadableStream<Uint8Array>({ start(controller) {
+      controller.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"content":"partial"}}]}\n\ndata: {"error":{}}\n\n'))
+    }, cancel })
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(body)))
+    const chunk = vi.fn()
+    await expect(runProviderModel(compatible, bot, [], 10000, chunk)).rejects.toThrow('stream error')
+    expect(chunk).toHaveBeenCalledTimes(1)
+    expect(cancel).toHaveBeenCalledTimes(1)
+    expect(body.locked).toBe(false)
+  })
+})
+
 describe('Ollama cumulative usage', () => {
   it.each([
     [{ prompt_eval_count: 10 }, { eval_count: 2 }, { eval_count: 5 }],

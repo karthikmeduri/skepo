@@ -78,16 +78,19 @@ async function runOpenAICompatible(provider: ModelProvider, bot: Bot, messages: 
   const response = await fetchProvider(provider, '/chat/completions', { method: 'POST', headers, signal, body: JSON.stringify({ model: bot.model, messages: allMessages(bot, messages), temperature: bot.temperature, top_p: bot.topP, stream: !!onChunk }) })
   if (!response.ok) throw new Error(await response.text() || `${provider.name} returned HTTP ${response.status}`)
   if (!onChunk) {
-    const data = await response.json() as { choices?: { message?: { content?: string } }[]; usage?: { total_tokens?: number } }
+    const data = await response.json() as { error?: unknown; choices?: { message?: { content?: string } }[]; usage?: { total_tokens?: number } }
+    if (data.error != null) throw new Error(`${provider.name} returned an error response; generation did not complete.`)
     return { content: data.choices?.[0]?.message?.content?.trim() ?? '', tokens: data.usage?.total_tokens ?? 0 }
   }
-  let content = ''; let tokens = 0
+  let content = ''; let tokens = 0; let completed = false
   await readSse(response, data => {
-    if (data === '[DONE]') return
-    const packet = JSON.parse(data) as { choices?: { delta?: { content?: string } }[]; usage?: { total_tokens?: number } }
+    if (data === '[DONE]') { completed = true; return }
+    const packet = JSON.parse(data) as { error?: unknown; choices?: { delta?: { content?: string } }[]; usage?: { total_tokens?: number } }
+    if (packet.error != null) throw new Error(`${provider.name} returned a stream error; generation did not complete.`)
     const chunk = packet.choices?.[0]?.delta?.content ?? ''; if (chunk) { content += chunk; onChunk(chunk) }
     tokens = packet.usage?.total_tokens ?? tokens
   })
+  if (!completed) throw new Error(`${provider.name} stream ended before completion; output may be incomplete.`)
   return { content: content.trim(), tokens }
 }
 

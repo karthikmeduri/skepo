@@ -28,6 +28,25 @@ plan remains in effect; milestones are not guaranteed calendar-day deadlines.
 
 ## Milestone sequence
 
+### 2026-10-30 scheduled run: compatible-API stream completion and errors
+
+- Compatible Chat Completions streams now require `[DONE]` before EOF and
+  reject non-null error envelopes in both response modes, including HTTP 200.
+  Envelope failures use fixed messages instead of echoing upstream payloads.
+  Partial callbacks remain visible, but failures do not return ModelResults.
+- Seven fixtures cover truncation (including finish_reason without DONE),
+  both error response modes, final usage, no trailing newline and cleanup of
+  an open error stream after partial output.
+- All 61 tests passed (835 ms Vitest duration); TypeScript, frontend production
+  build (3.71 s), and whitespace checks passed. No UI code changed.
+- OpenAI Docs skill guided the strict terminal-marker requirement using:
+  https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create
+- Third-party gateways omitting DONE now fail closed; no live compatibility
+  certification is claimed. Usage requests/accounting, numeric validation,
+  unknown-versus-zero counts, cancellation and performance baselines remain.
+  Milestone 1 is not complete. No resource/inference benchmark, paid API call,
+  model download, installer build, GUI acceptance or macOS validation.
+
 ### 2026-10-29 scheduled run: Ollama independent usage counters
 
 - Implementation commit: `68f1671`, pushed to `origin/codex/provider-reliability`.
