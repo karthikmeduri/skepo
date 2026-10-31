@@ -43,9 +43,13 @@ function allMessages(bot: Bot, messages: { role: string; content: string }[]) {
 
 export async function runProviderModel(provider: ModelProvider, bot: Bot, messages: { role: string; content: string }[], timeoutMs = 180_000, onChunk?: (content: string) => void, signal?: AbortSignal): Promise<ModelResult> {
   if (!provider.enabled) throw new Error(`${provider.name} is disabled.`)
-  const headers = await providerHeaders(provider)
   const timeoutSignal = AbortSignal.timeout(timeoutMs)
   const requestSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal
+  requestSignal.throwIfAborted()
+  const headers = await providerHeaders(provider)
+  // Credential lookup can yield; cancellation during it must not dispatch a
+  // model request, even when a transport shim ignores an aborted signal.
+  requestSignal.throwIfAborted()
   if (provider.kind === 'ollama') return runOllama(provider, bot, messages, headers, requestSignal, onChunk)
   if (provider.kind === 'anthropic') return runAnthropic(provider, bot, messages, headers, requestSignal, onChunk)
   return runOpenAICompatible(provider, bot, messages, headers, requestSignal, onChunk)

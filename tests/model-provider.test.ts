@@ -3,6 +3,7 @@ import type { Bot, ModelProvider } from '../src/types'
 
 vi.mock('../electron/provider-vault.js', () => ({ getProviderKey: vi.fn(async () => 'fixture-key') }))
 import { runProviderModel } from '../electron/model-provider'
+import { getProviderKey } from '../electron/provider-vault.js'
 
 const provider: ModelProvider = { id: 'ollama', kind: 'ollama', name: 'Ollama', baseUrl: 'http://localhost:11434', enabled: true }
 const bot: Bot = { id: 'test', name: 'Test', description: '', model: 'fixture', systemPrompt: '', avatarColor: '', temperature: 0, topP: 1, contextLength: 4096, createdAt: 0, updatedAt: 0 }
@@ -285,10 +286,34 @@ describe('provider request cancellation and deadlines', () => {
   })
 
   it('preserves an already cancelled caller signal', async () => {
-    const captured = captureRequestSignal()
-    await runProviderModel(provider, bot, [], 10000, undefined, AbortSignal.abort('already cancelled'))
-    expect(captured().aborted).toBe(true)
-    expect(captured().reason).toBe('already cancelled')
+    const fetch = vi.fn()
+    vi.stubGlobal('fetch', fetch)
+    await expect(runProviderModel(provider, bot, [], 10000, undefined, AbortSignal.abort('already cancelled'))).rejects.toBe('already cancelled')
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('does not access credentials for an already cancelled API request', async () => {
+    const key = vi.mocked(getProviderKey)
+    key.mockClear()
+    vi.stubGlobal('fetch', vi.fn())
+    await expect(runProviderModel({ ...provider, kind: 'anthropic' }, bot, [], 10000, undefined, AbortSignal.abort('cancelled'))).rejects.toBe('cancelled')
+    expect(key).not.toHaveBeenCalled()
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('does not dispatch after cancellation during credential lookup', async () => {
+    const controller = new AbortController()
+    vi.mocked(getProviderKey).mockImplementationOnce(async () => { controller.abort('cancelled during lookup'); return 'fixture-key' })
+    vi.stubGlobal('fetch', vi.fn())
+    await expect(runProviderModel({ ...provider, kind: 'anthropic' }, bot, [], 10000, undefined, controller.signal)).rejects.toBe('cancelled during lookup')
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('includes credential lookup in the request deadline', async () => {
+    vi.mocked(getProviderKey).mockImplementationOnce(async () => { await new Promise(resolve => setTimeout(resolve, 50)); return 'fixture-key' })
+    vi.stubGlobal('fetch', vi.fn())
+    await expect(runProviderModel({ ...provider, kind: 'anthropic' }, bot, [], 10)).rejects.toMatchObject({ name: 'TimeoutError' })
+    expect(fetch).not.toHaveBeenCalled()
   })
 
   it('applies a deadline without a caller signal', async () => {

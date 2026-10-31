@@ -28,6 +28,23 @@ plan remains in effect; milestones are not guaranteed calendar-day deadlines.
 
 ## Milestone sequence
 
+### 2026-10-31 scheduled run: cancellation before dispatch
+
+- Already-cancelled requests now reject before credential access or network
+  dispatch. A second guard after credential lookup prevents dispatch when
+  cancellation or deadline expiry occurs while awaiting credentials.
+- Deadline starts before credential lookup. Lookup itself is not interruptible:
+  rejection waits for it to settle; this does not promise immediate cancellation
+  of a hung vault or cancellation of remote billing after dispatch.
+- Updated the pre-cancelled transport test and added three cases for skipped
+  credential access, cancellation during lookup and deadline expiry in lookup.
+- All 64 tests passed (958 ms Vitest duration), TypeScript check, frontend
+  production build (3.73 s), and diff whitespace checks passed.
+- No UI changes, GUI validation, paid calls, model downloads, installer rebuild,
+  macOS testing or inference/resource benchmark. Tests use mocked credentials.
+- Milestone 1 remains incomplete: usage requests and numeric/unknown usage
+  handling, in-flight cancellation coverage and reproducible resource baselines.
+
 ### 2026-10-30 scheduled run: compatible-API stream completion and errors
 
 - Implementation commit: `36bd00a`, pushed to `origin/codex/provider-reliability`.
