@@ -30,6 +30,7 @@ plan remains in effect; milestones are not guaranteed calendar-day deadlines.
 
 ### 2026-10-31 scheduled run: cancellation before dispatch
 
+- Implementation commit: `0e8b17a`, pushed to `origin/codex/provider-reliability`.
 - Already-cancelled requests now reject before credential access or network
   dispatch. A second guard after credential lookup prevents dispatch when
   cancellation or deadline expiry occurs while awaiting credentials.
