@@ -28,6 +28,22 @@ plan remains in effect; milestones are not guaranteed calendar-day deadlines.
 
 ## Milestone sequence
 
+### 2026-11-01 scheduled run: in-flight HTTP cancellation evidence
+
+- Added six loopback HTTP integration tests using real fetch rather than a
+  mocked transport. Ollama, Claude and compatible SSE formats each exercise
+  caller cancellation after partial text and deadline expiry on a stalled body.
+- Tests assert rejection type, one partial callback, and server-observed client
+  disconnection. Fixtures use ephemeral 127.0.0.1 ports, mocked credentials,
+  no inference and explicit connection/server cleanup. No runtime code changed.
+- All 70 tests passed (2.30 s Vitest duration); TypeScript check, frontend build
+  (3.93 s), and whitespace validation passed. This validates Node fetch against
+  local protocol fixtures, not Electron GUI behavior or remote billing stops.
+- No paid calls, model downloads, installer, GUI test or actual macOS validation.
+  Resource/inference benchmarking remains pending; test duration is not a
+  performance baseline. Milestone 1 still needs usage requests/accounting,
+  numeric and unknown-usage handling and reproducible performance baselines.
+
 ### 2026-10-31 scheduled run: cancellation before dispatch
 
 - Implementation commit: `0e8b17a`, pushed to `origin/codex/provider-reliability`.
