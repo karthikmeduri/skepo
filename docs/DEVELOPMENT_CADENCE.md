@@ -30,6 +30,7 @@ plan remains in effect; milestones are not guaranteed calendar-day deadlines.
 
 ### 2026-11-01 scheduled run: in-flight HTTP cancellation evidence
 
+- Test commit: `e250cba`, pushed to `origin/codex/provider-reliability`.
 - Added six loopback HTTP integration tests using real fetch rather than a
   mocked transport. Ollama, Claude and compatible SSE formats each exercise
   caller cancellation after partial text and deadline expiry on a stalled body.
