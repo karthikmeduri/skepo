@@ -28,6 +28,23 @@ plan remains in effect; milestones are not guaranteed calendar-day deadlines.
 
 ## Milestone sequence
 
+### 2026-11-01 user-requested Windows preview packaging
+
+- User explicitly requested an installer and GitHub publication, deferring
+  installation/permissions and offline Ollama acceptance until tonight. No
+  paid API testing authorized or performed.
+- Version 0.8.1 packages the provider-reliability branch as an unsigned x64
+  Windows NSIS preview. Separate output: `release/preview-0.8.1`; existing
+  installers preserved. Packaging used `--publish never`; release upload is
+  explicit and marked prerelease, without replacing the stable release.
+- All 70 tests passed (2.19 s); TypeScript and Vite build (2.46 s) passed.
+  NSIS packaging passed; archive inspection confirmed the compiled fixes and
+  version. Installer size/hash and testing checklist are in
+  `releases/v0.8.1-preview.md`. Initial unquoted PowerShell output override failed;
+  quoted override succeeded. Archive reads require Windows path separators.
+- Installer has not been executed. GUI/offline-model acceptance remains pending.
+  This packaging request does not complete milestone 1 or the larger roadmap.
+
 ### 2026-11-01 scheduled run: in-flight HTTP cancellation evidence
 
 - Test commit: `e250cba`, pushed to `origin/codex/provider-reliability`.

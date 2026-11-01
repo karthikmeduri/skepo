@@ -1,6 +1,6 @@
 {
   "name": "skepo-desktop",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "A local-first Windows workspace for organized AI agents across Ollama and user-owned APIs.",
   "author": "Skepo",
   "main": "dist-electron/electron/main.js",
