@@ -30,6 +30,8 @@ plan remains in effect; milestones are not guaranteed calendar-day deadlines.
 
 ### 2026-11-01 user-requested Windows preview packaging
 
+- Release source commit: `c48126b`. Published prerelease:
+  https://github.com/karthikmeduri/skepo/releases/tag/v0.8.1
 - User explicitly requested an installer and GitHub publication, deferring
   installation/permissions and offline Ollama acceptance until tonight. No
   paid API testing authorized or performed.
