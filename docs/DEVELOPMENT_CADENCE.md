@@ -28,6 +28,24 @@ plan remains in effect; milestones are not guaranteed calendar-day deadlines.
 
 ## Milestone sequence
 
+### 2026-11-07 scheduled run (Pacific): Ollama adapter fixture baseline
+
+- Test commit: `8f48f31`. Reproduce with
+  `node node_modules/vitest/vitest.mjs run tests/ollama-stream-baseline.test.ts`.
+  Fixed 6,198-byte NDJSON body, 127-byte reads, 128 Unicode text fragments.
+  Each run checks exact output, callback count and final reported tokens.
+- Standalone run: Windows x64, Node v22.23.4, first call 7.978 ms. Next 30
+  calls: median 0.332 ms, p95 0.812 ms (nearest rank), aggregate process CPU
+  16 ms including assertions/sampling. RSS at warm start 61,784,064 bytes;
+  largest post-call sample 65,232,896 bytes. RSS includes the Vitest worker;
+  sampling between calls is not an allocation profile or true peak measurement.
+- First call is after test imports, not app/model cold start. No network,
+  inference, model load, GPU, UI or disk workload measured. No speedup claim
+  or hardware-dependent timing gate. No installer changes or paid calls.
+- All 71 regressions passed; TypeScript and frontend production build passed.
+  Milestone 1 remains open: usage reporting/validation, actual offline model
+  and desktop baselines/acceptance. No SQLite or later milestone work started.
+
 ### 2026-11-01 user-requested Windows preview packaging
 
 - Release source commit: `c48126b`. Published prerelease:
