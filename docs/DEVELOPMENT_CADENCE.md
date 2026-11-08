@@ -28,6 +28,24 @@ plan remains in effect; milestones are not guaranteed calendar-day deadlines.
 
 ## Milestone sequence
 
+### 2026-11-08: validate final per-request token counts
+
+- Implementation: `36b3de7`. All three provider adapters check the final
+  counters consumed by ModelResult before workflow accounting. Negative,
+  fractional, nonnumeric or unsafe-integer counts and overflowing component
+  sums reject with a fixed error. Missing/null fields retain their prior
+  fallback. This does not validate every intermediate stream update or
+  independently verify that the provider reported truthful usage.
+- Twelve fixtures cover streaming and non-streaming paths. All 83 tests
+  passed; TypeScript, Vite production build and staged whitespace checks passed.
+  In the suite's synthetic Ollama baseline only: 30 warm calls used 15 ms
+  process CPU; largest sampled worker RSS 62,955,520 bytes. Not inference,
+  desktop memory, or evidence of a performance improvement.
+- No live model/API calls, UI changes, installer rebuild or macOS validation.
+  0.8.1 remains unchanged. Milestone 1 remaining: request and distinguish
+  unavailable usage, budget handling when usage is unknown, and offline
+  model/desktop baselines and acceptance.
+
 ### 2026-11-07 scheduled run (Pacific): Ollama adapter fixture baseline
 
 - Test commit: `8f48f31`. Reproduce with
