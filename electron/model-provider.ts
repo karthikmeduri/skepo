@@ -10,9 +10,22 @@ interface AnthropicUsage {
   cache_read_input_tokens?: number
 }
 
+// Provider JSON is not type-checked at runtime. Never publish an invalid
+// total to the workflow ledger, where += would concatenate strings or refund
+// negative usage. Missing counts retain the existing zero fallback.
+function tokenTotal(...counts: unknown[]): number {
+  let sum = 0
+  for (const count of counts) {
+    if (count == null) continue
+    if (typeof count !== 'number' || !Number.isSafeInteger(count) || count < 0 || !Number.isSafeInteger(sum + count))
+      throw new Error('Provider returned an invalid token count.')
+    sum += count
+  }
+  return sum
+}
+
 function anthropicTokenTotal(usage: AnthropicUsage) {
-  return (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0)
-    + (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0)
+  return tokenTotal(usage.input_tokens, usage.output_tokens, usage.cache_creation_input_tokens, usage.cache_read_input_tokens)
 }
 
 function cleanBaseUrl(raw: string, provider: ModelProvider) {
@@ -61,7 +74,7 @@ async function runOllama(provider: ModelProvider, bot: Bot, messages: { role: st
   if (!onChunk) {
     const data = await response.json() as { message?: { content?: string }; error?: string; prompt_eval_count?: number; eval_count?: number }
     if (data.error) throw new Error(data.error)
-    return { content: data.message?.content?.trim() ?? '', tokens: (data.prompt_eval_count ?? 0) + (data.eval_count ?? 0) }
+    return { content: data.message?.content?.trim() ?? '', tokens: tokenTotal(data.prompt_eval_count, data.eval_count) }
   }
   let content = ''; let inputTokens = 0; let outputTokens = 0; let completed = false
   await readLines(response, line => {
@@ -75,7 +88,7 @@ async function runOllama(provider: ModelProvider, bot: Bot, messages: { role: st
     if (packet.done === true) completed = true
   })
   if (!completed) throw new Error(`${provider.name} stream ended before completion; output may be incomplete.`)
-  return { content: content.trim(), tokens: inputTokens + outputTokens }
+  return { content: content.trim(), tokens: tokenTotal(inputTokens, outputTokens) }
 }
 
 async function runOpenAICompatible(provider: ModelProvider, bot: Bot, messages: { role: string; content: string }[], headers: Record<string,string>, signal: AbortSignal, onChunk?: (content: string) => void): Promise<ModelResult> {
@@ -84,7 +97,7 @@ async function runOpenAICompatible(provider: ModelProvider, bot: Bot, messages: 
   if (!onChunk) {
     const data = await response.json() as { error?: unknown; choices?: { message?: { content?: string } }[]; usage?: { total_tokens?: number } }
     if (data.error != null) throw new Error(`${provider.name} returned an error response; generation did not complete.`)
-    return { content: data.choices?.[0]?.message?.content?.trim() ?? '', tokens: data.usage?.total_tokens ?? 0 }
+    return { content: data.choices?.[0]?.message?.content?.trim() ?? '', tokens: tokenTotal(data.usage?.total_tokens) }
   }
   let content = ''; let tokens = 0; let completed = false
   await readSse(response, data => {
@@ -95,7 +108,7 @@ async function runOpenAICompatible(provider: ModelProvider, bot: Bot, messages: 
     tokens = packet.usage?.total_tokens ?? tokens
   })
   if (!completed) throw new Error(`${provider.name} stream ended before completion; output may be incomplete.`)
-  return { content: content.trim(), tokens }
+  return { content: content.trim(), tokens: tokenTotal(tokens) }
 }
 
 async function runAnthropic(provider: ModelProvider, bot: Bot, messages: { role: string; content: string }[], headers: Record<string,string>, signal: AbortSignal, onChunk?: (content: string) => void): Promise<ModelResult> {

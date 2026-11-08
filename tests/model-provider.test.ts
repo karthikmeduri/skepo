@@ -10,6 +10,26 @@ const bot: Bot = { id: 'test', name: 'Test', description: '', model: 'fixture', 
 
 afterEach(() => vi.unstubAllGlobals())
 
+describe('final token-count validation', () => {
+  for (const streaming of [false, true]) {
+    it.each([
+      ['ollama', { eval_count: -1 }, ''],
+      ['ollama', { prompt_eval_count: Number.MAX_SAFE_INTEGER, eval_count: 1 }, ''],
+      ['anthropic', { usage: { output_tokens: 0.5 } }, 'data: {"type":"message_stop"}'],
+      ['anthropic', { usage: { cache_read_input_tokens: '5' } }, 'data: {"type":"message_stop"}'],
+      ['openai-compatible', { usage: { total_tokens: 'private provider text' } }, 'data: [DONE]'],
+      ['openai-compatible', { usage: { total_tokens: Number.MAX_SAFE_INTEGER + 1 } }, 'data: [DONE]'],
+    ] as const)(`rejects malformed or overflowing %s counts (stream=${streaming}) %j`, async (kind, data, end) => {
+      const packet = { type: 'message_delta', done: true, ...data }
+      const json = JSON.stringify(packet)
+      const wire = streaming && kind !== 'ollama' ? `data: ${json}\n\n${end}\n\n` : json
+      vi.stubGlobal('fetch', vi.fn(async () => new Response(wire)))
+      await expect(runProviderModel({ ...provider, kind }, bot, [], 10000, streaming ? vi.fn() : undefined))
+        .rejects.toThrow(/^Provider returned an invalid token count\.$/)
+    })
+  }
+})
+
 describe('compatible API completion and errors', () => {
   const compatible: ModelProvider = { ...provider, kind: 'openai-compatible', name: 'Compatible' }
 
