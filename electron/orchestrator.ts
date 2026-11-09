@@ -5,7 +5,8 @@ import { randomUUID } from 'node:crypto'
 import type { Bot, DecisionRecord, LedgerNote, WorkflowManifest, WorkflowStartRequest, WorkflowTask } from '../src/types'
 import type { DecisionRequest } from './decision-engine'
 
-export type ModelResult = { content: string; tokens: number }
+export type { ModelResult } from './model-provider.js'
+import type { ModelResult } from './model-provider.js'
 // Runners add bot.systemPrompt once; messages contain only task-specific context.
 export type ModelRunner = (bot: Bot, messages: { role: string; content: string }[], ollamaUrl: string, timeoutMs?: number) => Promise<ModelResult>
 export type WorkflowEmitter = (manifest: WorkflowManifest) => void
@@ -124,7 +125,14 @@ async function waitWhilePaused(sessionId: string) {
   await new Promise<void>(resolve => { if (control) control.wake = resolve })
 }
 
+const unknownBudget = 'Workflow stopped: the provider did not report complete token usage; the remaining budget is unknown.'
+function accountUsage(manifest: WorkflowManifest, result: ModelResult) {
+  manifest.tokensUsed += result.tokens
+  if (result.usageIncomplete) { manifest.usageIncomplete = true; throw new Error(unknownBudget) }
+}
+
 function enforceLimits(manifest: WorkflowManifest) {
+  if (manifest.usageIncomplete) throw new Error(unknownBudget)
   if (manifest.tokensUsed >= manifest.budget.maxTotalTokens) throw new Error('Workflow token budget reached.')
   if (Date.now() - manifest.startedAt >= manifest.budget.timeoutMinutes * 60_000) throw new Error('Workflow time budget reached.')
   if (active.get(manifest.sessionId)?.cancelled) throw new Error('Workflow cancelled.')
@@ -148,7 +156,7 @@ export async function startWorkflow(request: WorkflowStartRequest, runModel: Mod
       { role: 'system', content: `You are the workflow broker. Return JSON only. Decompose the goal into a small dependency graph. Assign each task to an available bot ID. Mark risk as "review" if a task could change external state, delete/overwrite data, publish, spend money, or needs a human decision; otherwise "safe".` },
       { role: 'user', content: `Goal: ${request.goal}\nAvailable workers: ${JSON.stringify(workers)}\nReturn {"tasks":[{"id":"1","title":"...","description":"specific deliverable","assignedBotId":"...","dependencies":[],"risk":"safe|review"}]}. Maximum ${request.budget.maxTasks} tasks. Dependencies may reference only earlier task IDs.` },
     ], request.ollamaUrl, 180_000)
-    manifest.tokensUsed += planning.tokens
+    accountUsage(manifest, planning)
     manifest.tasks = normalizePlan(extractObject(planning.content), request)
     if (decide) {
       const decision = await decide({
@@ -187,7 +195,8 @@ async function executeTask(request: WorkflowStartRequest, manifest: WorkflowMani
       { role: 'system', content: `You are a worker in a bounded local workflow. Complete only your assigned task. Return a concise deliverable with assumptions, evidence, decisions, and next-step information. Do not claim to modify files or external systems.` },
       { role: 'user', content: `Global goal: ${manifest.goal}\n\nAssigned task: ${task.title}\n${task.description}${dependencyResults ? `\n\nCompleted dependencies:\n${dependencyResults}` : ''}${contextFrom(notes)}` },
     ], request.ollamaUrl, Math.max(60_000, request.budget.timeoutMinutes * 60_000))
-    task.result = result.content; task.tokenCount += result.tokens; manifest.tokensUsed += result.tokens; task.lease = undefined
+    task.tokenCount += result.tokens; accountUsage(manifest, result)
+    task.result = result.content; task.lease = undefined
     if (decide) {
       const decision = await decide({
         kind: 'result-check', mode: decisionModeFor(worker, request), layaEndpoint: request.layaEndpoint, taskId: task.id,
@@ -202,7 +211,7 @@ async function executeTask(request: WorkflowStartRequest, manifest: WorkflowMani
     } else { task.status = 'completed'; task.completedAt = Date.now() }
   } catch (error) {
     task.error = error instanceof Error ? error.message : String(error); task.lease = undefined
-    task.status = task.attempts <= manifest.budget.maxRetries ? 'pending' : 'failed'
+    task.status = !manifest.usageIncomplete && task.attempts <= manifest.budget.maxRetries ? 'pending' : 'failed'
   }
   if (control.cancelled) { task.status = 'cancelled'; task.lease = undefined; manifest.status = 'cancelled' }
   else if (control.paused) manifest.status = 'paused'
@@ -237,7 +246,7 @@ export async function runWorkflow(request: WorkflowStartRequest, manifest: Workf
       { role: 'system', content: `You are the final reviewer. Reconcile the worker outputs, call out conflicts or uncertainty, and produce one coherent result for the user's goal. Do not invent work that was not completed.` },
       { role: 'user', content: `Goal: ${manifest.goal}\n\nWorker outputs:\n${outputs}` },
     ], request.ollamaUrl, 180_000)
-    manifest.tokensUsed += review.tokens; manifest.finalOutput = review.content; manifest.status = 'completed'; manifest.completedAt = Date.now()
+    accountUsage(manifest, review); manifest.finalOutput = review.content; manifest.status = 'completed'; manifest.completedAt = Date.now()
     const decisionsFile = path.join(sessionFolder(request.workspacePath, manifest.sessionId), 'decisions.md')
     await atomicAppend(decisionsFile, `\n## Final review — ${new Date().toISOString()}\n\n${review.content}\n`)
     await saveManifest(request.workspacePath, manifest, emit)

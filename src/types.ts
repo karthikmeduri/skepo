@@ -216,6 +216,7 @@ export interface WorkflowManifest {
   tasks: WorkflowTask[]
   budget: WorkflowBudget
   tokensUsed: number
+  usageIncomplete?: true
   decisions: DecisionRecord[]
   startedAt: number
   updatedAt: number

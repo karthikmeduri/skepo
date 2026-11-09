@@ -10,6 +10,20 @@ const bot: Bot = { id: 'test', name: 'Test', description: '', model: 'fixture', 
 
 afterEach(() => vi.unstubAllGlobals())
 
+it.each([
+  ['ollama', { eval_count: 7 }, 7, true],
+  ['anthropic', { usage: { input_tokens: 3 } }, 3, true],
+  ['openai-compatible', { usage: null }, 0, true],
+  ['ollama', { eval_count: 0, prompt_eval_count: 0 }, 0, false],
+  ['anthropic', { usage: { input_tokens: 0, output_tokens: 0 } }, 0, false],
+  ['openai-compatible', { usage: { total_tokens: 0 } }, 0, false],
+] as const)('distinguishes incomplete non-streaming %s usage: %j', async (kind, packet, tokens, incomplete) => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(packet))))
+  const result = await runProviderModel({ ...provider, kind }, bot, [])
+  expect(result.tokens).toBe(tokens)
+  expect(!!result.usageIncomplete).toBe(incomplete)
+})
+
 describe('final token-count validation', () => {
   for (const streaming of [false, true]) {
     it.each([

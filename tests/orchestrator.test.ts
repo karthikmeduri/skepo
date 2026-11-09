@@ -11,6 +11,30 @@ const makeBot = (id: string, name: string): Bot => ({ id, name, description: `${
 afterEach(async () => { await Promise.all(tempFolders.splice(0).map(folder => fs.rm(folder, { recursive: true, force: true }))) })
 
 describe('workflow orchestrator', () => {
+  it.each(['broker', 'worker', 'reviewer'])('stops on incomplete %s accounting without automatic retries', async missing => {
+    const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'skepo-budget-'))
+    tempFolders.push(workspace)
+    const roles = ['broker', 'worker', 'reviewer']
+    const request: WorkflowStartRequest = {
+      workspacePath: workspace, ollamaUrl: 'http://test', goal: 'Summarize notes', orchestratorBotId: 'broker', reviewerBotId: 'reviewer',
+      workerBotIds: ['worker'], bots: roles.map(id => makeBot(id, id)), layaEndpoint: '',
+      budget: { maxTasks: 1, maxParallel: 1, maxRetries: 2, maxTotalTokens: 5000, timeoutMinutes: 10, approvePlan: false, decisionMode: 'local' },
+    }
+    const calls: string[] = []
+    let failed!: (m: WorkflowManifest) => void
+    const finished = new Promise<WorkflowManifest>(resolve => { failed = resolve })
+    await startWorkflow(request, async bot => {
+      calls.push(bot.id)
+      return { tokens: 2, ...(bot.id === missing ? { usageIncomplete: true as const } : {}),
+        content: bot.id === 'broker' ? JSON.stringify({ tasks: [{ title: 'Summarize', description: 'Read notes', assignedBotId: 'worker', risk: 'safe' }] }) : 'summary' }
+    }, async () => [], m => { if (m.status === 'failed') failed(m) })
+    const m = await finished
+    expect(calls).toEqual(roles.slice(0, roles.indexOf(missing) + 1))
+    expect(m.error).toContain('remaining budget is unknown')
+    const persisted = JSON.parse(await fs.readFile(path.join(workspace, '.skepo-ledger', 'sessions', m.sessionId, 'manifest.json'), 'utf8'))
+    expect(persisted).toMatchObject({ status: 'failed', usageIncomplete: true, tokensUsed: calls.length * 2 })
+  })
+
   it('creates a bounded, dependency-safe, durable plan', async () => {
     const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'skepo-workflow-'))
     tempFolders.push(workspace)

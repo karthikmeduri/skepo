@@ -1,7 +1,7 @@
 import type { Bot, ModelProvider } from '../src/types'
 import { getProviderKey } from './provider-vault.js'
 
-export interface ModelResult { content: string; tokens: number }
+export interface ModelResult { content: string; tokens: number; usageIncomplete?: true }
 
 interface AnthropicUsage {
   input_tokens?: number
@@ -74,7 +74,8 @@ async function runOllama(provider: ModelProvider, bot: Bot, messages: { role: st
   if (!onChunk) {
     const data = await response.json() as { message?: { content?: string }; error?: string; prompt_eval_count?: number; eval_count?: number }
     if (data.error) throw new Error(data.error)
-    return { content: data.message?.content?.trim() ?? '', tokens: tokenTotal(data.prompt_eval_count, data.eval_count) }
+    return { content: data.message?.content?.trim() ?? '', tokens: tokenTotal(data.prompt_eval_count, data.eval_count),
+      ...(data.prompt_eval_count == null || data.eval_count == null ? { usageIncomplete: true } : {}) }
   }
   let content = ''; let inputTokens = 0; let outputTokens = 0; let completed = false
   await readLines(response, line => {
@@ -97,7 +98,8 @@ async function runOpenAICompatible(provider: ModelProvider, bot: Bot, messages: 
   if (!onChunk) {
     const data = await response.json() as { error?: unknown; choices?: { message?: { content?: string } }[]; usage?: { total_tokens?: number } }
     if (data.error != null) throw new Error(`${provider.name} returned an error response; generation did not complete.`)
-    return { content: data.choices?.[0]?.message?.content?.trim() ?? '', tokens: tokenTotal(data.usage?.total_tokens) }
+    return { content: data.choices?.[0]?.message?.content?.trim() ?? '', tokens: tokenTotal(data.usage?.total_tokens),
+      ...(data.usage?.total_tokens == null ? { usageIncomplete: true } : {}) }
   }
   let content = ''; let tokens = 0; let completed = false
   await readSse(response, data => {
@@ -122,7 +124,8 @@ async function runAnthropic(provider: ModelProvider, bot: Bot, messages: { role:
   if (!onChunk) {
     const data = await response.json() as { type?: string; error?: unknown; content?: { type: string; text?: string }[]; usage?: AnthropicUsage }
     if (data.type === 'error' || data.error != null) throw new Error(`${provider.name} returned an error response; generation did not complete.`)
-    return { content: data.content?.filter(item => item.type === 'text').map(item => item.text ?? '').join('').trim() ?? '', tokens: anthropicTokenTotal(data.usage ?? {}) }
+    return { content: data.content?.filter(item => item.type === 'text').map(item => item.text ?? '').join('').trim() ?? '', tokens: anthropicTokenTotal(data.usage ?? {}),
+      ...(data.usage?.input_tokens == null || data.usage.output_tokens == null ? { usageIncomplete: true } : {}) }
   }
   let content = ''; let usage: AnthropicUsage = {}; let completed = false
   await readSse(response, data => {
