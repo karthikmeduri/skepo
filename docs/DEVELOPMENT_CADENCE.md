@@ -28,6 +28,24 @@ plan remains in effect; milestones are not guaranteed calendar-day deadlines.
 
 ## Milestone sequence
 
+### 2026-11-09: stop budgeted board runs on unreported usage
+
+- Implementation: `176c2c8`. Non-streaming model results now distinguish
+  incomplete counts from reported zero. The board records available tokens,
+  marks the manifest usageIncomplete and stops if the broker, worker or reviewer
+  omits required counts. A worker is not automatically retried for this reason.
+  The normal budget guard also checks the persisted flag on re-entry.
+- Six adapter fixtures and three workflow fixtures cover explicit zero, missing
+  fields, partial counts, saved failure state, and call order with retries enabled.
+  All 92 tests passed; TypeScript, frontend build and whitespace checks passed.
+  Synthetic adapter fixture only: 16 ms warm process CPU, max sampled worker
+  RSS 63,496,192 bytes. Not model inference or desktop resource measurement.
+- Scope: missing counts on successful non-streaming responses, not billing
+  reconciliation. Already-dispatched parallel work is not revoked. No live
+  inference, installation, GUI or macOS validation; no changes to 0.8.1.
+- Remaining milestone 1: streaming usage reporting/request options and
+  unknown-usage presentation, plus offline model and desktop baselines.
+
 ### 2026-11-08: validate final per-request token counts
 
 - Implementation: `36b3de7`. All three provider adapters check the final
