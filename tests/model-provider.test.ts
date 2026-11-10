@@ -2,13 +2,28 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Bot, ModelProvider } from '../src/types'
 
 vi.mock('../electron/provider-vault.js', () => ({ getProviderKey: vi.fn(async () => 'fixture-key') }))
-import { runProviderModel } from '../electron/model-provider'
+import { chatStats, runProviderModel } from '../electron/model-provider'
 import { getProviderKey } from '../electron/provider-vault.js'
 
 const provider: ModelProvider = { id: 'ollama', kind: 'ollama', name: 'Ollama', baseUrl: 'http://localhost:11434', enabled: true }
 const bot: Bot = { id: 'test', name: 'Test', description: '', model: 'fixture', systemPrompt: '', avatarColor: '', temperature: 0, topP: 1, contextLength: 4096, createdAt: 0, updatedAt: 0 }
 
 afterEach(() => vi.unstubAllGlobals())
+
+it.each([
+  ['ollama', '{"eval_count":4,"done":true}', 4, true],
+  ['ollama', '{"eval_count":0,"prompt_eval_count":0,"done":true}', 0, false],
+  ['anthropic', 'data: {"type":"message_delta","usage":{"output_tokens":4}}\n\ndata: {"type":"message_stop"}', 4, true],
+  ['anthropic', 'data: {"type":"message_start","message":{"usage":{"input_tokens":0,"output_tokens":0}}}\n\ndata: {"type":"message_stop"}', 0, false],
+  ['openai-compatible', 'data: {"usage":null}\n\ndata: [DONE]', 0, true],
+  ['openai-compatible', 'data: {"usage":{"total_tokens":4}}\n\ndata: [DONE]', 4, false],
+] as const)('derives stream statistics only for reported totals: %s %s', async (kind, wire, tokens, incomplete) => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(wire)))
+  const result = await runProviderModel({ ...provider, kind }, bot, [], 10000, vi.fn())
+  expect(result.tokens).toBe(tokens)
+  expect(!!result.usageIncomplete).toBe(incomplete)
+  expect(chatStats(result, 2000)).toEqual({ totalDuration: 2000, tokensPerSecond: incomplete || !tokens ? undefined : tokens / 2 })
+})
 
 it.each([
   ['ollama', { eval_count: 7 }, 7, true],
@@ -120,7 +135,7 @@ describe('Ollama stream completion', () => {
 
   it('allows a completed empty response', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('{"done":true}\n')))
-    expect(await runProviderModel(provider, bot, [], 10000, vi.fn())).toEqual({ content: '', tokens: 0 })
+    expect(await runProviderModel(provider, bot, [], 10000, vi.fn())).toEqual({ content: '', tokens: 0, usageIncomplete: true })
   })
 })
 
@@ -212,7 +227,7 @@ describe('provider stream cleanup', () => {
 
   it('unlocks completed streams and reads a final packet without a newline', async () => {
     const { body, cancel } = fixture('{"message":{"content":"hello"},"eval_count":2,"done":true}', true)
-    expect(await runProviderModel(provider, bot, [], 10000, vi.fn())).toEqual({ content: 'hello', tokens: 2 })
+    expect(await runProviderModel(provider, bot, [], 10000, vi.fn())).toEqual({ content: 'hello', tokens: 2, usageIncomplete: true })
     expect(cancel).not.toHaveBeenCalled()
     expect(body.locked).toBe(false)
   })

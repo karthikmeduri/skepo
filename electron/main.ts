@@ -10,7 +10,7 @@ import { approveWorkflow, listWorkflows, retryWorkflowTask, setManifestCancelled
 import { clearJevApiKey, decisionEngineStatus, runDecision, setJevApiKey } from './decision-engine.js'
 import { approveBrowserRun, cancelBrowserRun, closeBrowserHarness, resumeBrowserRun, showBrowserRun, startBrowserRun } from './browser-harness.js'
 import { checkLaya, installManagedLaya, startManagedLaya, stopManagedLaya } from './laya-runtime.js'
-import { runProviderModel, testProvider } from './model-provider.js'
+import { chatStats, runProviderModel, testProvider } from './model-provider.js'
 import { clearProviderKey, providerKeyStatus, setProviderKey } from './provider-vault.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -296,11 +296,10 @@ function registerIpc() {
     try {
       const result = await runProviderModel(providerFor(request.bot, rawUrl), request.bot, request.messages, 180_000, content => event.sender.send('ollama:chat-event', { type: 'chunk', requestId: request.requestId, content }), controller.signal)
       const elapsed = performance.now() - startedAt
-      const tokensPerSecond = result.tokens > 0 && elapsed > 0 ? result.tokens / (elapsed / 1000) : undefined
       event.sender.send('ollama:chat-event', {
         type: 'done',
         requestId: request.requestId,
-        stats: { tokensPerSecond, totalDuration: elapsed },
+        stats: chatStats(result, elapsed),
       })
     } catch (error) {
       if (!controller.signal.aborted) {

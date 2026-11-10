@@ -3,6 +3,11 @@ import { getProviderKey } from './provider-vault.js'
 
 export interface ModelResult { content: string; tokens: number; usageIncomplete?: true }
 
+export function chatStats(result: ModelResult, elapsedMs: number) {
+  return { totalDuration: elapsedMs, tokensPerSecond: !result.usageIncomplete && result.tokens > 0 && elapsedMs > 0
+    ? result.tokens / (elapsedMs / 1000) : undefined }
+}
+
 interface AnthropicUsage {
   input_tokens?: number
   output_tokens?: number
@@ -77,7 +82,7 @@ async function runOllama(provider: ModelProvider, bot: Bot, messages: { role: st
     return { content: data.message?.content?.trim() ?? '', tokens: tokenTotal(data.prompt_eval_count, data.eval_count),
       ...(data.prompt_eval_count == null || data.eval_count == null ? { usageIncomplete: true } : {}) }
   }
-  let content = ''; let inputTokens = 0; let outputTokens = 0; let completed = false
+  let content = ''; let inputTokens: number | undefined; let outputTokens: number | undefined; let completed = false
   await readLines(response, line => {
     const packet = JSON.parse(line) as { done?: boolean; message?: { content?: string }; error?: string; prompt_eval_count?: number; eval_count?: number }
     if (packet.error) throw new Error(packet.error)
@@ -89,7 +94,8 @@ async function runOllama(provider: ModelProvider, bot: Bot, messages: { role: st
     if (packet.done === true) completed = true
   })
   if (!completed) throw new Error(`${provider.name} stream ended before completion; output may be incomplete.`)
-  return { content: content.trim(), tokens: tokenTotal(inputTokens, outputTokens) }
+  return { content: content.trim(), tokens: tokenTotal(inputTokens, outputTokens),
+    ...(inputTokens == null || outputTokens == null ? { usageIncomplete: true } : {}) }
 }
 
 async function runOpenAICompatible(provider: ModelProvider, bot: Bot, messages: { role: string; content: string }[], headers: Record<string,string>, signal: AbortSignal, onChunk?: (content: string) => void): Promise<ModelResult> {
@@ -101,7 +107,7 @@ async function runOpenAICompatible(provider: ModelProvider, bot: Bot, messages: 
     return { content: data.choices?.[0]?.message?.content?.trim() ?? '', tokens: tokenTotal(data.usage?.total_tokens),
       ...(data.usage?.total_tokens == null ? { usageIncomplete: true } : {}) }
   }
-  let content = ''; let tokens = 0; let completed = false
+  let content = ''; let tokens: number | undefined; let completed = false
   await readSse(response, data => {
     if (data === '[DONE]') { completed = true; return }
     const packet = JSON.parse(data) as { error?: unknown; choices?: { delta?: { content?: string } }[]; usage?: { total_tokens?: number } }
@@ -110,7 +116,7 @@ async function runOpenAICompatible(provider: ModelProvider, bot: Bot, messages: 
     tokens = packet.usage?.total_tokens ?? tokens
   })
   if (!completed) throw new Error(`${provider.name} stream ended before completion; output may be incomplete.`)
-  return { content: content.trim(), tokens: tokenTotal(tokens) }
+  return { content: content.trim(), tokens: tokenTotal(tokens), ...(tokens == null ? { usageIncomplete: true } : {}) }
 }
 
 async function runAnthropic(provider: ModelProvider, bot: Bot, messages: { role: string; content: string }[], headers: Record<string,string>, signal: AbortSignal, onChunk?: (content: string) => void): Promise<ModelResult> {
@@ -138,7 +144,8 @@ async function runAnthropic(provider: ModelProvider, bot: Bot, messages: { role:
     if (packet.type === 'message_stop') completed = true
   })
   if (!completed) throw new Error(`${provider.name} stream ended before completion; output may be incomplete.`)
-  return { content: content.trim(), tokens: anthropicTokenTotal(usage) }
+  return { content: content.trim(), tokens: anthropicTokenTotal(usage),
+    ...(usage.input_tokens == null || usage.output_tokens == null ? { usageIncomplete: true } : {}) }
 }
 
 async function readLines(response: Response, consume: (line: string) => void) {
