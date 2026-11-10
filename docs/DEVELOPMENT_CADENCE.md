@@ -28,6 +28,22 @@ plan remains in effect; milestones are not guaranteed calendar-day deadlines.
 
 ## Milestone sequence
 
+### 2026-11-10: suppress chat rates based on incomplete streaming counts
+
+- Implementation: `5cc3e95`. Streaming results distinguish missing usage
+  from reported zero across Ollama, Claude and compatible gateways. Chat
+  completion IPC retains elapsed time but omits the rate when total usage
+  is incomplete. No migration of previously stored chat statistics.
+- Six new fixture cases exercise adapters through chat statistics. All 98
+  tests passed, plus TypeScript, production frontend build and whitespace
+  checks. Synthetic adapter fixture: 31 ms aggregate warm CPU and 63,057,920
+  bytes maximum sampled worker RSS; not a desktop or inference measurement.
+- No UI code changes, manual GUI testing, API/model calls, new installer or
+  macOS validation. A reported rate is still total reported tokens divided
+  by elapsed request time, not output-only decoding speed.
+- Remaining milestone 1: explicit usage requests where supported, offline
+  model and desktop baselines/acceptance. Published 0.8.1 is unchanged.
+
 ### 2026-11-09: stop budgeted board runs on unreported usage
 
 - Implementation: `176c2c8`. Non-streaming model results now distinguish
