@@ -11,6 +11,27 @@ const bot: Bot = { id: 'test', name: 'Test', description: '', model: 'fixture', 
 afterEach(() => vi.unstubAllGlobals())
 
 it.each([
+  ['openai', 'https://api.openai.com/v1/', true, true],
+  ['openai', 'https://api.openai.com/v1', false, false],
+  ['openai', 'https://proxy.invalid/v1', true, false],
+  ['openai-compatible', 'https://gateway.invalid/v1', true, false],
+] as const)('requests streamed usage only on the official endpoint: %s %s stream=%s', async (kind, baseUrl, stream, expected) => {
+  const transport = vi.fn(async (_url: string, init: RequestInit) => {
+    const body = JSON.parse(init.body as string)
+    if (expected) expect(body.stream_options).toEqual({ include_usage: true })
+    else expect(body).not.toHaveProperty('stream_options')
+    return new Response(stream
+      ? (body.stream_options?.include_usage ? 'data: {"choices":[],"usage":{"total_tokens":7}}\n\n' : '') + 'data: [DONE]'
+      : '{"usage":{"total_tokens":7}}')
+  })
+  vi.stubGlobal('fetch', transport)
+  const result = await runProviderModel({ ...provider, kind, baseUrl }, bot, [], 10000, stream ? vi.fn() : undefined)
+  expect(result.tokens).toBe(expected || !stream ? 7 : 0)
+  expect(!!result.usageIncomplete).toBe(stream && !expected)
+  expect(transport).toHaveBeenCalledTimes(1)
+})
+
+it.each([
   ['ollama', '{"eval_count":4,"done":true}', 4, true],
   ['ollama', '{"eval_count":0,"prompt_eval_count":0,"done":true}', 0, false],
   ['anthropic', 'data: {"type":"message_delta","usage":{"output_tokens":4}}\n\ndata: {"type":"message_stop"}', 4, true],

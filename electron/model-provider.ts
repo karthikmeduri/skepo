@@ -99,7 +99,13 @@ async function runOllama(provider: ModelProvider, bot: Bot, messages: { role: st
 }
 
 async function runOpenAICompatible(provider: ModelProvider, bot: Bot, messages: { role: string; content: string }[], headers: Record<string,string>, signal: AbortSignal, onChunk?: (content: string) => void): Promise<ModelResult> {
-  const response = await fetchProvider(provider, '/chat/completions', { method: 'POST', headers, signal, body: JSON.stringify({ model: bot.model, messages: allMessages(bot, messages), temperature: bot.temperature, top_p: bot.topP, stream: !!onChunk }) })
+  // A custom base URL can use the OpenAI profile without implementing this option.
+  const includeUsage = onChunk && provider.kind === 'openai'
+    && provider.baseUrl.trim().replace(/\/+$/, '') === 'https://api.openai.com/v1'
+  const response = await fetchProvider(provider, '/chat/completions', { method: 'POST', headers, signal, body: JSON.stringify({
+    model: bot.model, messages: allMessages(bot, messages), temperature: bot.temperature, top_p: bot.topP,
+    stream: !!onChunk, ...(includeUsage ? { stream_options: { include_usage: true } } : {}),
+  }) })
   if (!response.ok) throw new Error(await response.text() || `${provider.name} returned HTTP ${response.status}`)
   if (!onChunk) {
     const data = await response.json() as { error?: unknown; choices?: { message?: { content?: string } }[]; usage?: { total_tokens?: number } }
