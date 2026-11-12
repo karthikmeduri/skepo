@@ -28,6 +28,21 @@ plan remains in effect; milestones are not guaranteed calendar-day deadlines.
 
 ## Milestone sequence
 
+### 2026-11-11 (Pacific): request usage on official OpenAI streams
+
+- Commit `d3a6811`: the OpenAI profile opts in to the final usage chunk
+  only when streaming to its canonical v1 endpoint. Non-streamed requests
+  and custom gateway URLs keep their previous request bodies. No speculative
+  retry, extra model call, or assumption of third-party parameter support.
+- Four mock request/response cases verified the option and its exclusions.
+  All 102 tests, TypeScript and frontend production build passed. No UI change.
+  Synthetic adapter workload: 31 ms aggregate warm CPU, 63,451,136 bytes
+  maximum sampled worker RSS; not inference speed or model memory.
+- Source: [OpenAI Chat Completions streaming events](https://developers.openai.com/api/reference/resources/chat/subresources/completions/streaming-events).
+  Usage can remain unavailable on interruption; this is not billing reconciliation.
+- No live providers, installation, desktop acceptance or new release. Milestone
+  1 still needs actual offline Ollama and desktop baseline measurements.
+
 ### 2026-11-10: suppress chat rates based on incomplete streaming counts
 
 - Implementation: `5cc3e95`. Streaming results distinguish missing usage
